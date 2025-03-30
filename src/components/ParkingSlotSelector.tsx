@@ -85,7 +85,7 @@ const ParkingSlotSelector: React.FC<ParkingSlotSelectorProps> = ({
                             disabled={slot.status === 'occupied'}
                           />
                           <span>{slot.number}</span>
-                          {slot.status === 'selected' && (
+                          {slot.id === selectedSlot && (
                             <Check size={14} className="ml-1" />
                           )}
                         </Label>
