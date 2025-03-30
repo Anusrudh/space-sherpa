@@ -23,7 +23,8 @@ const ParkingCard: React.FC<ParkingCardProps> = ({ location }) => {
   const navigate = useNavigate();
 
   const handleBookNow = () => {
-    navigate(`/book/${location.id}`);
+    // Always navigate to Downtown Parking Garage
+    navigate(`/book/1`);
   };
 
   return (

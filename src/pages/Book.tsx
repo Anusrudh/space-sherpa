@@ -1,75 +1,63 @@
 
-import React from 'react';
-import { useParams } from 'react-router-dom';
+import React, { useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import BookingForm from '@/components/BookingForm';
-import { ParkingLocation } from '@/components/ParkingCard';
 import { Card, CardContent } from '@/components/ui/card';
 import { MapPin, Clock, Car, ParkingMeter } from 'lucide-react';
+import ParkingSlotSelector, { ParkingSlot } from '@/components/ParkingSlotSelector';
+import { toast } from '@/components/ui/use-toast';
 
-// Mock data for parking locations
-const parkingLocations: ParkingLocation[] = [
-  {
-    id: 1,
-    name: "Downtown Parking Garage",
-    address: "123 Main St, Downtown",
-    hourlyRate: 3.50,
-    dailyRate: 20.00,
-    availableSpots: 45,
-    features: ["Covered", "Security"]
-  },
-  {
-    id: 2,
-    name: "Central Plaza Parking",
-    address: "456 Center Ave, Midtown",
-    hourlyRate: 4.00,
-    availableSpots: 20,
-    features: ["EV Charging", "24/7"]
-  },
-  {
-    id: 3,
-    name: "Riverside Parking Lot",
-    address: "789 River Rd, Riverside",
-    hourlyRate: 2.50,
-    dailyRate: 15.00,
-    availableSpots: 78,
-    features: ["Outdoor", "Surveillance"]
-  },
-  {
-    id: 4,
-    name: "Station Square Garage",
-    address: "101 Station Square, Downtown",
-    hourlyRate: 5.00,
-    dailyRate: 25.00,
-    availableSpots: 32,
-    features: ["Covered", "Security", "EV Charging"]
-  },
-  {
-    id: 5,
-    name: "Westside Parking",
-    address: "202 West Blvd, Westside",
-    hourlyRate: 3.00,
-    availableSpots: 15,
-    features: ["Outdoor"]
-  },
-  {
-    id: 6,
-    name: "City Center Parking",
-    address: "303 Central St, Downtown",
-    hourlyRate: 4.50,
-    dailyRate: 22.00,
-    availableSpots: 60,
-    features: ["Covered", "24/7", "Valet"]
-  },
-];
+// Single parking location - Downtown Parking Garage
+const parkingLocation = {
+  id: 1,
+  name: "Downtown Parking Garage",
+  address: "123 Main St, Downtown",
+  hourlyRate: 3.50,
+  dailyRate: 20.00,
+  availableSpots: 45,
+  features: ["Covered", "Security"]
+};
+
+// Generate parking slots
+const generateParkingSlots = (): ParkingSlot[] => {
+  // Create 50 slots (A1-E10)
+  const slots: ParkingSlot[] = [];
+  const rows = ['A', 'B', 'C', 'D', 'E'];
+  
+  rows.forEach(row => {
+    for (let i = 1; i <= 10; i++) {
+      // Make some slots randomly occupied (about 20%)
+      const isOccupied = Math.random() < 0.2;
+      
+      slots.push({
+        id: `${row}${i}`,
+        number: `${row}${i}`,
+        status: isOccupied ? 'occupied' : 'available'
+      });
+    }
+  });
+  
+  return slots;
+};
 
 const Book = () => {
+  const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const parkingId = parseInt(id || "1");
+  const [parkingSlots] = useState<ParkingSlot[]>(generateParkingSlots);
+  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   
-  // Find the selected parking location
-  const selectedLocation = parkingLocations.find(location => location.id === parkingId) || parkingLocations[0];
+  // Handle slot selection
+  const handleSelectSlot = (slotId: string) => {
+    setSelectedSlot(slotId);
+    
+    // Show toast notification
+    toast({
+      title: "Parking Slot Selected",
+      description: `You've selected parking slot ${slotId}. Continue with the booking form to confirm.`,
+    });
+  };
   
   return (
     <div className="flex flex-col min-h-screen">
@@ -77,10 +65,10 @@ const Book = () => {
       
       <div className="bg-parking-primary text-white py-8">
         <div className="container mx-auto px-4">
-          <h1 className="text-3xl font-bold mb-2">{selectedLocation.name}</h1>
+          <h1 className="text-3xl font-bold mb-2">{parkingLocation.name}</h1>
           <p className="text-lg flex items-center">
             <MapPin size={16} className="mr-1" />
-            {selectedLocation.address}
+            {parkingLocation.address}
           </p>
         </div>
       </div>
@@ -99,7 +87,7 @@ const Book = () => {
                       <MapPin size={20} className="text-parking-accent mr-3 mt-1" />
                       <div>
                         <h3 className="font-semibold">Location</h3>
-                        <p className="text-parking-gray">{selectedLocation.address}</p>
+                        <p className="text-parking-gray">{parkingLocation.address}</p>
                       </div>
                     </div>
                     
@@ -107,9 +95,9 @@ const Book = () => {
                       <ParkingMeter size={20} className="text-parking-accent mr-3 mt-1" />
                       <div>
                         <h3 className="font-semibold">Pricing</h3>
-                        <p className="text-parking-gray">${selectedLocation.hourlyRate.toFixed(2)}/hour</p>
-                        {selectedLocation.dailyRate && (
-                          <p className="text-parking-gray">${selectedLocation.dailyRate.toFixed(2)}/day max</p>
+                        <p className="text-parking-gray">${parkingLocation.hourlyRate.toFixed(2)}/hour</p>
+                        {parkingLocation.dailyRate && (
+                          <p className="text-parking-gray">${parkingLocation.dailyRate.toFixed(2)}/day max</p>
                         )}
                       </div>
                     </div>
@@ -127,7 +115,7 @@ const Book = () => {
                       <div>
                         <h3 className="font-semibold">Features</h3>
                         <ul className="text-parking-gray">
-                          {selectedLocation.features.map((feature, index) => (
+                          {parkingLocation.features.map((feature, index) => (
                             <li key={index}>• {feature}</li>
                           ))}
                         </ul>
@@ -150,12 +138,23 @@ const Book = () => {
               </Card>
             </div>
             
-            {/* Booking Form */}
+            {/* Booking Form with Slot Selection */}
             <div className="lg:col-span-2">
+              <Card className="mb-8">
+                <CardContent className="p-6">
+                  <ParkingSlotSelector 
+                    slots={parkingSlots} 
+                    selectedSlot={selectedSlot}
+                    onSelectSlot={handleSelectSlot}
+                  />
+                </CardContent>
+              </Card>
+              
               <BookingForm 
-                parkingId={selectedLocation.id} 
-                parkingName={selectedLocation.name}
-                hourlyRate={selectedLocation.hourlyRate}
+                parkingId={parkingLocation.id} 
+                parkingName={parkingLocation.name}
+                hourlyRate={parkingLocation.hourlyRate}
+                selectedSlot={selectedSlot}
               />
             </div>
           </div>

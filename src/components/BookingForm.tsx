@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -51,9 +50,10 @@ interface BookingFormProps {
   parkingId: number;
   parkingName: string;
   hourlyRate: number;
+  selectedSlot?: string | null;
 }
 
-const BookingForm: React.FC<BookingFormProps> = ({ parkingId, parkingName, hourlyRate }) => {
+const BookingForm: React.FC<BookingFormProps> = ({ parkingId, parkingName, hourlyRate, selectedSlot }) => {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -108,19 +108,50 @@ const BookingForm: React.FC<BookingFormProps> = ({ parkingId, parkingName, hourl
   };
 
   const onSubmit = (data: z.infer<typeof formSchema>) => {
+    // Validate slot selection
+    if (!selectedSlot) {
+      toast({
+        title: "Please Select a Parking Slot",
+        description: "You need to select a parking slot before proceeding with the booking.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     // This would be where you'd send data to the backend
-    console.log("Booking submitted:", data);
+    console.log("Booking submitted:", {
+      ...data,
+      parkingSlot: selectedSlot
+    });
     
     // Show success message
     toast({
       title: "Booking Confirmed!",
-      description: `Your parking spot at ${parkingName} has been booked for ${format(data.date, 'PPP')} from ${data.startTime} to ${data.endTime}.`,
+      description: `Your parking slot ${selectedSlot} at ${parkingName} has been booked for ${format(data.date, 'PPP')} from ${data.startTime} to ${data.endTime}.`,
     });
   };
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
-      <h2 className="text-2xl font-bold text-parking-primary mb-6">Book Your Parking Space</h2>
+      <h2 className="text-2xl font-bold text-parking-primary mb-6">Complete Your Booking</h2>
+      
+      {selectedSlot ? (
+        <div className="mb-6 p-3 bg-green-50 border border-green-200 rounded-md">
+          <p className="text-green-800 flex items-center gap-2">
+            <span className="bg-green-100 text-green-700 px-2 py-1 rounded font-semibold">
+              Slot {selectedSlot}
+            </span>
+            <span>selected</span>
+          </p>
+        </div>
+      ) : (
+        <div className="mb-6 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+          <p className="text-yellow-800">
+            Please select a parking slot from the map above before proceeding.
+          </p>
+        </div>
+      )}
+      
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -408,8 +439,11 @@ const BookingForm: React.FC<BookingFormProps> = ({ parkingId, parkingName, hourl
           <Button 
             type="submit" 
             className="w-full bg-parking-accent hover:bg-parking-highlight text-white text-lg py-6"
+            disabled={!selectedSlot}
           >
-            Confirm Booking - ${calculateCost().toFixed(2)}
+            {selectedSlot 
+              ? `Confirm Booking - Slot ${selectedSlot} - $${calculateCost().toFixed(2)}`
+              : 'Please select a parking slot first'}
           </Button>
         </form>
       </Form>
