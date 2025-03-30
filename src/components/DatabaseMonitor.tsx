@@ -14,11 +14,12 @@ import { Loader2 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 
 interface DatabaseRequest {
-  Event: string;
-  Count: number;
-  'Total Latency': string;
-  'Avg Latency': string;
-  'Max Latency': string;
+  query_type: string;
+  count: number;
+  total_time: string;
+  avg_time: string;
+  max_time: string;
+  last_executed?: string;
 }
 
 const DatabaseMonitor = () => {
@@ -82,9 +83,9 @@ const DatabaseMonitor = () => {
           <TableRow>
             <TableHead>Query Type</TableHead>
             <TableHead>Count</TableHead>
-            <TableHead>Total Latency</TableHead>
-            <TableHead>Avg Latency</TableHead>
-            <TableHead>Max Latency</TableHead>
+            <TableHead>Total Time</TableHead>
+            <TableHead>Average Time</TableHead>
+            <TableHead>Max Time</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -92,12 +93,12 @@ const DatabaseMonitor = () => {
             requests.map((request, index) => (
               <TableRow key={index}>
                 <TableCell className="font-medium max-w-md truncate">
-                  {request.Event}
+                  {request.query_type}
                 </TableCell>
-                <TableCell>{request.Count}</TableCell>
-                <TableCell>{request['Total Latency']}</TableCell>
-                <TableCell>{request['Avg Latency']}</TableCell>
-                <TableCell>{request['Max Latency']}</TableCell>
+                <TableCell>{request.count}</TableCell>
+                <TableCell>{request.total_time}</TableCell>
+                <TableCell>{request.avg_time}</TableCell>
+                <TableCell>{request.max_time}</TableCell>
               </TableRow>
             ))
           ) : (

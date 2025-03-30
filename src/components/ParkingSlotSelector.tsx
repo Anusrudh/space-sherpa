@@ -1,111 +1,116 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
+import { toast } from "@/components/ui/use-toast";
 
-import React from 'react';
-import { cn } from '@/lib/utils';
-import { Check } from 'lucide-react';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Label } from '@/components/ui/label';
-
-export interface ParkingSlot {
-  id: string;
-  number: string;
-  status: 'available' | 'occupied' | 'selected';
+interface DatabaseRequest {
+  query_type: string;
+  count: number;
+  total_time: string;
+  avg_time: string;
+  max_time: string;
+  last_executed?: string;
 }
 
-interface ParkingSlotSelectorProps {
-  slots: ParkingSlot[];
-  selectedSlot: string | null;
-  onSelectSlot: (slotId: string) => void;
-}
+const DatabaseMonitor = () => {
+  const [requests, setRequests] = useState<DatabaseRequest[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
 
-const ParkingSlotSelector: React.FC<ParkingSlotSelectorProps> = ({
-  slots,
-  selectedSlot,
-  onSelectSlot,
-}) => {
-  // Group slots into rows of 5 for better display
-  const slotRows = slots.reduce<ParkingSlot[][]>((acc, slot, index) => {
-    const rowIndex = Math.floor(index / 5);
-    if (!acc[rowIndex]) {
-      acc[rowIndex] = [];
+  const fetchDatabaseRequests = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('http://localhost:3001/api/monitor/requests');
+      if (!response.ok) {
+        throw new Error('Failed to fetch database requests');
+      }
+      const data = await response.json();
+      setRequests(data);
+      toast({
+        title: "Success",
+        description: "Database requests loaded successfully",
+      });
+    } catch (error) {
+      console.error('Error fetching database requests:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load database requests",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
-    acc[rowIndex].push(slot);
-    return acc;
+  };
+
+  useEffect(() => {
+    fetchDatabaseRequests();
+    // Set up auto-refresh every 30 seconds
+    const intervalId = setInterval(fetchDatabaseRequests, 30000);
+    return () => clearInterval(intervalId);
   }, []);
 
   return (
-    <div className="parking-slot-selector">
-      <div className="mb-8">
-        <div className="bg-parking-primary text-white py-3 text-center rounded-t-lg font-semibold">
-          Downtown Parking Garage - Select Your Slot
-        </div>
-
-        <div className="my-6 flex justify-center">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-gray-200 rounded-sm"></div>
-              <span className="text-xs">Available</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-gray-500 rounded-sm"></div>
-              <span className="text-xs">Occupied</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-parking-accent rounded-sm"></div>
-              <span className="text-xs">Selected</span>
-            </div>
-          </div>
-        </div>
-
-        <RadioGroup value={selectedSlot || ""} onValueChange={onSelectSlot}>
-          <div className="grid gap-6">
-            {slotRows.map((row, rowIndex) => (
-              <div key={rowIndex} className="flex justify-center gap-3">
-                {row.map((slot) => (
-                  <div key={slot.id} className="parking-slot">
-                    <div
-                      className={cn(
-                        "w-12 h-12 flex items-center justify-center rounded-md transition-colors",
-                        slot.status === 'available' ? "bg-gray-200 hover:bg-gray-300 cursor-pointer" :
-                        slot.status === 'occupied' ? "bg-gray-500 cursor-not-allowed" :
-                        slot.status === 'selected' ? "bg-parking-accent text-white" : ""
-                      )}
-                    >
-                      {slot.status !== 'occupied' ? (
-                        <Label
-                          htmlFor={`slot-${slot.id}`}
-                          className={cn(
-                            "cursor-pointer flex items-center justify-center w-full h-full",
-                            slot.status === 'selected' && "text-white"
-                          )}
-                        >
-                          <RadioGroupItem
-                            id={`slot-${slot.id}`}
-                            value={slot.id}
-                            className="sr-only"
-                            disabled={slot.status === 'occupied'}
-                          />
-                          <span>{slot.number}</span>
-                          {slot.id === selectedSlot && (
-                            <Check size={14} className="ml-1" />
-                          )}
-                        </Label>
-                      ) : (
-                        <span className="text-white">{slot.number}</span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        </RadioGroup>
-
-        <div className="mt-8 py-2 bg-gray-100 text-center text-gray-500 text-sm rounded-b-lg">
-          Entrance
-        </div>
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold">Database Request Monitor</h2>
+        <Button 
+          onClick={fetchDatabaseRequests} 
+          disabled={loading}
+          className="bg-parking-primary hover:bg-parking-highlight"
+        >
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Refreshing
+            </>
+          ) : (
+            'Refresh'
+          )}
+        </Button>
       </div>
+
+      <Table>
+        <TableCaption>Recent database queries and their performance metrics</TableCaption>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Query Type</TableHead>
+            <TableHead>Count</TableHead>
+            <TableHead>Total Time</TableHead>
+            <TableHead>Average Time</TableHead>
+            <TableHead>Max Time</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {requests.length > 0 ? (
+            requests.map((request, index) => (
+              <TableRow key={index}>
+                <TableCell className="font-medium max-w-md truncate">
+                  {request.query_type}
+                </TableCell>
+                <TableCell>{request.count}</TableCell>
+                <TableCell>{request.total_time}</TableCell>
+                <TableCell>{request.avg_time}</TableCell>
+                <TableCell>{request.max_time}</TableCell>
+              </TableRow>
+            ))
+          ) : (
+            <TableRow>
+              <TableCell colSpan={5} className="text-center py-4">
+                {loading ? 'Loading...' : 'No database requests found'}
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
     </div>
   );
 };
 
-export default ParkingSlotSelector;
+export default DatabaseMonitor;

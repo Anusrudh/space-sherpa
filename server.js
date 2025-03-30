@@ -165,14 +165,15 @@ app.put('/api/bookings/:id/cancel', async (req, res) => {
 // Create a route to view DB requests for monitoring purposes
 app.get('/api/monitor/requests', async (req, res) => {
   try {
-    // Instead of using performance_schema, use our custom monitoring table
+    // Use our custom monitoring table
     const [rows] = await pool.query(`
       SELECT 
-        query_type AS 'Event',
-        count AS 'Count',
-        CONCAT(ROUND(total_time * 1000, 2), ' ms') AS 'Total Latency',
-        CONCAT(ROUND(avg_time * 1000, 2), ' ms') AS 'Avg Latency',
-        CONCAT(ROUND(max_time * 1000, 2), ' ms') AS 'Max Latency'
+        query_type,
+        count,
+        CONCAT(ROUND(total_time * 1000, 2), ' ms') AS total_time,
+        CONCAT(ROUND(avg_time * 1000, 2), ' ms') AS avg_time,
+        CONCAT(ROUND(max_time * 1000, 2), ' ms') AS max_time,
+        last_executed
       FROM db_monitoring
       ORDER BY total_time DESC
     `);

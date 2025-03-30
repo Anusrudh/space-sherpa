@@ -45,15 +45,17 @@ SELECT * FROM (
 ) AS data
 WHERE NOT EXISTS (SELECT 1 FROM parking_slots LIMIT 1);
 
+-- Drop the db_monitoring table if it exists to ensure clean creation
+DROP TABLE IF EXISTS db_monitoring;
+
 -- Create a table to store database monitoring information manually
--- This is a workaround since not all MySQL installations have performance_schema enabled
-CREATE TABLE IF NOT EXISTS db_monitoring (
+CREATE TABLE db_monitoring (
   id INT AUTO_INCREMENT PRIMARY KEY,
-  query_type VARCHAR(50) NOT NULL,
+  query_type VARCHAR(100) NOT NULL,
   count INT DEFAULT 1,
-  total_time DECIMAL(10, 2) DEFAULT 0,
-  avg_time DECIMAL(10, 2) DEFAULT 0,
-  max_time DECIMAL(10, 2) DEFAULT 0,
+  total_time DECIMAL(10, 6) DEFAULT 0,
+  avg_time DECIMAL(10, 6) DEFAULT 0,
+  max_time DECIMAL(10, 6) DEFAULT 0,
   last_executed TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
