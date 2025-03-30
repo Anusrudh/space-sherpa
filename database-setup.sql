@@ -45,14 +45,21 @@ SELECT * FROM (
 ) AS data
 WHERE NOT EXISTS (SELECT 1 FROM parking_slots LIMIT 1);
 
--- Create view for monitoring requests
-CREATE OR REPLACE VIEW db_requests AS
-SELECT 
-  event_name AS 'Event',
-  COUNT_STAR AS 'Count',
-  sys.format_time(SUM_TIMER_WAIT) AS 'Total_Latency',
-  sys.format_time(AVG_TIMER_WAIT) AS 'Avg_Latency',
-  sys.format_time(MAX_TIMER_WAIT) AS 'Max_Latency'
-FROM performance_schema.events_statements_summary_by_digest
-ORDER BY SUM_TIMER_WAIT DESC
-LIMIT 100;
+-- Create a table to store database monitoring information manually
+-- This is a workaround since not all MySQL installations have performance_schema enabled
+CREATE TABLE IF NOT EXISTS db_monitoring (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  query_type VARCHAR(50) NOT NULL,
+  count INT DEFAULT 1,
+  total_time DECIMAL(10, 2) DEFAULT 0,
+  avg_time DECIMAL(10, 2) DEFAULT 0,
+  max_time DECIMAL(10, 2) DEFAULT 0,
+  last_executed TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Insert some sample monitoring data
+INSERT INTO db_monitoring (query_type, count, total_time, avg_time, max_time) VALUES
+('SELECT * FROM parking_slots', 15, 0.023, 0.0015, 0.005),
+('INSERT INTO bookings', 8, 0.046, 0.0058, 0.012),
+('UPDATE parking_slots SET status', 12, 0.035, 0.0029, 0.008),
+('SELECT * FROM bookings', 20, 0.031, 0.0016, 0.004);

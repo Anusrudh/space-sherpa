@@ -80,7 +80,7 @@ const DatabaseMonitor = () => {
         <TableCaption>Recent database queries and their performance metrics</TableCaption>
         <TableHeader>
           <TableRow>
-            <TableHead>Event</TableHead>
+            <TableHead>Query Type</TableHead>
             <TableHead>Count</TableHead>
             <TableHead>Total Latency</TableHead>
             <TableHead>Avg Latency</TableHead>
