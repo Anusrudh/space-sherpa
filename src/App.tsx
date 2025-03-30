@@ -10,6 +10,7 @@ import Bookings from "./pages/Bookings";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import NotFound from "./pages/NotFound";
+import DbMonitor from "./pages/DbMonitor";
 
 const queryClient = new QueryClient();
 
@@ -26,6 +27,7 @@ const App = () => (
           <Route path="/bookings" element={<Bookings />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/db-monitor" element={<DbMonitor />} />
           {/* The Search page is removed since we're focusing on one garage */}
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />

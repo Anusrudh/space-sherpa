@@ -1,60 +1,34 @@
 
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { UserCircle, Menu } from 'lucide-react';
-import { 
-  Sheet,
-  SheetContent,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { Database } from "lucide-react";
 
-const Header: React.FC = () => {
+const Header = () => {
   return (
-    <header className="bg-parking-primary text-white py-4 shadow-md">
-      <div className="container mx-auto px-4 flex items-center justify-between">
-        <Link to="/" className="flex items-center space-x-2">
-          <div className="font-bold text-2xl">SpaceParking</div>
+    <header className="bg-white border-b border-gray-200">
+      <div className="container mx-auto px-4 py-4 flex justify-between items-center">
+        <Link to="/" className="flex items-center gap-2">
+          <span className="bg-parking-primary text-white px-3 py-1 rounded-md font-bold">P</span>
+          <span className="text-xl font-semibold text-parking-primary">SpaceSherpa</span>
         </Link>
-        
-        {/* Mobile Menu */}
-        <div className="md:hidden">
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="text-white">
-                <Menu size={24} />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="right">
-              <nav className="flex flex-col gap-4 mt-8">
-                <Link to="/" className="px-4 py-2 hover:bg-parking-accent rounded-md">Home</Link>
-                <Link to="/search" className="px-4 py-2 hover:bg-parking-accent rounded-md">Find Parking</Link>
-                <Link to="/bookings" className="px-4 py-2 hover:bg-parking-accent rounded-md">My Bookings</Link>
-                <Link to="/login" className="px-4 py-2 hover:bg-parking-accent rounded-md">Login</Link>
-                <Link to="/register" className="px-4 py-2 hover:bg-parking-accent rounded-md">Register</Link>
-              </nav>
-            </SheetContent>
-          </Sheet>
-        </div>
-        
-        {/* Desktop Menu */}
-        <nav className="hidden md:flex items-center space-x-6">
-          <Link to="/" className="hover:text-parking-accent transition-colors">Home</Link>
-          <Link to="/search" className="hover:text-parking-accent transition-colors">Find Parking</Link>
-          <Link to="/bookings" className="hover:text-parking-accent transition-colors">My Bookings</Link>
-          <div className="flex space-x-2">
-            <Link to="/login">
-              <Button variant="outline" className="bg-transparent text-white border-white hover:bg-white hover:text-parking-primary">
-                Login
-              </Button>
-            </Link>
-            <Link to="/register">
-              <Button className="bg-parking-accent hover:bg-parking-highlight text-white">
-                Register
-              </Button>
-            </Link>
-          </div>
+
+        <nav className="hidden md:flex items-center gap-6">
+          <Link to="/book" className="text-gray-600 hover:text-parking-accent">Book Parking</Link>
+          <Link to="/bookings" className="text-gray-600 hover:text-parking-accent">My Bookings</Link>
+          <Link to="/db-monitor" className="text-gray-600 hover:text-parking-accent flex items-center">
+            <Database className="w-4 h-4 mr-1" /> Database Monitor
+          </Link>
         </nav>
+
+        <div className="flex items-center gap-3">
+          <Link to="/login">
+            <Button variant="outline">Login</Button>
+          </Link>
+          <Link to="/register">
+            <Button className="bg-parking-primary hover:bg-parking-highlight">Sign Up</Button>
+          </Link>
+        </div>
       </div>
     </header>
   );
