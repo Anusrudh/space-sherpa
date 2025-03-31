@@ -10,7 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Loader2, AlertCircle, Database, Calendar, List } from "lucide-react";
+import { Loader2, AlertCircle, Database, Calendar, List, RefreshCw } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { format } from 'date-fns';
@@ -36,11 +36,19 @@ interface Booking {
   slot_number?: string;
 }
 
+interface DbStructure {
+  tables: any[];
+  bookingsStructure: any[];
+  message: string;
+}
+
 const DatabaseMonitor = () => {
   const [requests, setRequests] = useState<DatabaseRequest[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [dbStructure, setDbStructure] = useState<DbStructure | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [loadingBookings, setLoadingBookings] = useState<boolean>(false);
+  const [loadingStructure, setLoadingStructure] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [bookingsError, setBookingsError] = useState<string | null>(null);
 
@@ -111,10 +119,40 @@ const DatabaseMonitor = () => {
       setLoadingBookings(false);
     }
   };
+  
+  const checkDatabaseStructure = async () => {
+    setLoadingStructure(true);
+    try {
+      const response = await fetch(`http://localhost:3001/api/check-db?t=${Date.now()}`);
+      
+      if (!response.ok) {
+        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      console.log("Database structure:", data);
+      setDbStructure(data);
+      
+      toast({
+        title: "Success",
+        description: "Database structure checked successfully",
+      });
+    } catch (error) {
+      console.error('Error checking database structure:', error);
+      toast({
+        title: "Error",
+        description: "Failed to check database structure",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingStructure(false);
+    }
+  };
 
   useEffect(() => {
     fetchDatabaseRequests();
     fetchBookings();
+    checkDatabaseStructure();
     // Set up auto-refresh every 30 seconds
     const intervalId = setInterval(() => {
       fetchDatabaseRequests();
@@ -134,37 +172,66 @@ const DatabaseMonitor = () => {
   // Function to create a sample booking for testing
   const createSampleBooking = async () => {
     try {
+      // Get a valid slot ID from the database first
+      const slotsResponse = await fetch('http://localhost:3001/api/slots');
+      if (!slotsResponse.ok) {
+        throw new Error(`Failed to fetch slots: ${slotsResponse.statusText}`);
+      }
+      
+      const slots = await slotsResponse.json();
+      console.log("Available slots:", slots);
+      
+      // Find an available slot
+      const availableSlot = slots.find((slot: any) => slot.status === 'available');
+      
+      if (!availableSlot) {
+        throw new Error('No available parking slots found');
+      }
+      
+      const slotId = availableSlot.id;
+      console.log(`Using slot ID: ${slotId} for test booking`);
+      
+      // Create a booking with the found slot
+      const bookingData = {
+        slotId: slotId,
+        vehicleNumber: `TEST-${Math.floor(1000 + Math.random() * 9000)}`,
+        startTime: new Date().toISOString(),
+        endTime: new Date(Date.now() + 3600000).toISOString(), // 1 hour later
+        totalCost: 10.00
+      };
+      
+      console.log("Sending booking data:", bookingData);
+      
       const response = await fetch('http://localhost:3001/api/bookings', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          slotId: 1,
-          vehicleNumber: 'TEST-1234',
-          startTime: new Date().toISOString(),
-          endTime: new Date(Date.now() + 3600000).toISOString(),
-          totalCost: 10.00
-        }),
+        body: JSON.stringify(bookingData),
       });
       
+      console.log("Booking creation response status:", response.status);
+      
       if (!response.ok) {
-        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+        const errorText = await response.text();
+        throw new Error(`Failed to create booking: ${errorText}`);
       }
       
       const data = await response.json();
       console.log("Created sample booking:", data);
+      
       toast({
         title: "Success",
         description: "Sample booking created successfully",
       });
+      
       // Refresh the bookings list
       fetchBookings();
     } catch (error) {
       console.error('Error creating sample booking:', error);
       toast({
         title: "Error",
-        description: "Failed to create sample booking",
+        description: error instanceof Error ? error.message : "Failed to create sample booking",
         variant: "destructive",
       });
     }
@@ -179,6 +246,7 @@ const DatabaseMonitor = () => {
             onClick={() => {
               fetchDatabaseRequests();
               fetchBookings();
+              checkDatabaseStructure();
             }} 
             disabled={loading || loadingBookings}
             className="bg-parking-primary hover:bg-parking-highlight"
@@ -188,7 +256,9 @@ const DatabaseMonitor = () => {
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Refreshing
               </>
             ) : (
-              'Refresh All'
+              <>
+                <RefreshCw className="mr-2 h-4 w-4" /> Refresh All
+              </>
             )}
           </Button>
           <Button 
@@ -202,15 +272,19 @@ const DatabaseMonitor = () => {
       </div>
 
       <Tabs defaultValue="bookings" className="w-full">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
+        <TabsList className="grid w-full max-w-md grid-cols-3">
           <TabsTrigger value="queries" className="flex items-center">
             <Database className="w-4 h-4 mr-2" /> Query Stats
           </TabsTrigger>
           <TabsTrigger value="bookings" className="flex items-center">
             <Calendar className="w-4 h-4 mr-2" /> Booking Details
           </TabsTrigger>
+          <TabsTrigger value="structure" className="flex items-center">
+            <List className="w-4 h-4 mr-2" /> DB Structure
+          </TabsTrigger>
         </TabsList>
 
+        {/* Query statistics tab content */}
         <TabsContent value="queries" className="mt-4">
           <div className="space-y-4">
             {error && (
@@ -273,6 +347,7 @@ const DatabaseMonitor = () => {
           </div>
         </TabsContent>
 
+        {/* Bookings tab content */}
         <TabsContent value="bookings" className="mt-4">
           <div className="space-y-4">
             {bookingsError && (
@@ -371,6 +446,91 @@ const DatabaseMonitor = () => {
                   className="mt-4"
                 >
                   Create Test Booking
+                </Button>
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* DB Structure tab content */}
+        <TabsContent value="structure" className="mt-4">
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-semibold flex items-center">
+                <Database className="w-5 h-5 mr-2" /> Database Structure
+              </h3>
+              <Button
+                onClick={checkDatabaseStructure}
+                disabled={loadingStructure}
+                variant="outline"
+                size="sm"
+              >
+                {loadingStructure ? (
+                  <>
+                    <Loader2 className="mr-2 h-3 w-3 animate-spin" /> Checking...
+                  </>
+                ) : (
+                  'Check Structure'
+                )}
+              </Button>
+            </div>
+            
+            {loadingStructure ? (
+              <div className="text-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+                <p className="mt-2">Checking database structure...</p>
+              </div>
+            ) : dbStructure ? (
+              <div className="space-y-6">
+                <div>
+                  <h4 className="text-md font-medium mb-2">Tables in Database:</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    {dbStructure.tables.map((table: any, index: number) => (
+                      <div key={index} className="bg-gray-100 p-3 rounded-md">
+                        {table.table_name}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                <div>
+                  <h4 className="text-md font-medium mb-2">Bookings Table Structure:</h4>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Field</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Null</TableHead>
+                        <TableHead>Key</TableHead>
+                        <TableHead>Default</TableHead>
+                        <TableHead>Extra</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {dbStructure.bookingsStructure.map((column: any, index: number) => (
+                        <TableRow key={index}>
+                          <TableCell>{column.Field}</TableCell>
+                          <TableCell>{column.Type}</TableCell>
+                          <TableCell>{column.Null}</TableCell>
+                          <TableCell>{column.Key}</TableCell>
+                          <TableCell>{column.Default || '-'}</TableCell>
+                          <TableCell>{column.Extra || '-'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8 border rounded-md bg-gray-50">
+                <p className="text-gray-500">No database structure information available.</p>
+                <Button 
+                  onClick={checkDatabaseStructure}
+                  variant="outline"
+                  size="sm"
+                  className="mt-4"
+                >
+                  Check Database Structure
                 </Button>
               </div>
             )}

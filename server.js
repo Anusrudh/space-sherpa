@@ -99,6 +99,7 @@ app.get('/api/bookings', async (req, res) => {
     const executionTime = endTime[0] * 1000 + endTime[1] / 1000000; // Convert to milliseconds
     await logQuery('SELECT * FROM bookings', executionTime / 1000); // Convert to seconds
     
+    console.log('Fetched bookings:', rows);
     res.json(rows);
   } catch (error) {
     console.error('Error fetching bookings:', error);
@@ -111,27 +112,51 @@ app.post('/api/bookings', async (req, res) => {
   const { slotId, vehicleNumber, startTime, endTime, totalCost } = req.body;
   const startHrTime = process.hrtime();
   
+  console.log('Received booking data:', req.body);
+  
   try {
-    const [result] = await pool.query(
-      'INSERT INTO bookings (slot_id, vehicle_number, start_time, end_time, total_cost, status) VALUES (?, ?, ?, ?, ?, ?)',
-      [slotId, vehicleNumber, startTime, endTime, totalCost, 'upcoming']
-    );
+    // Begin transaction
+    const connection = await pool.getConnection();
+    await connection.beginTransaction();
     
-    // Update slot status
-    await pool.query('UPDATE parking_slots SET status = ? WHERE id = ?', ['occupied', slotId]);
-    
-    // Log this query
-    const endHrTime = process.hrtime(startHrTime);
-    const executionTime = endHrTime[0] * 1000 + endHrTime[1] / 1000000;
-    await logQuery('INSERT INTO bookings', executionTime / 1000);
-    
-    res.status(201).json({ 
-      id: result.insertId,
-      message: 'Booking created successfully' 
-    });
+    try {
+      // Insert the booking record
+      console.log('Inserting booking with values:', [slotId, vehicleNumber, startTime, endTime, totalCost, 'upcoming']);
+      const [result] = await connection.query(
+        'INSERT INTO bookings (slot_id, vehicle_number, start_time, end_time, total_cost, status) VALUES (?, ?, ?, ?, ?, ?)',
+        [slotId, vehicleNumber, startTime, endTime, totalCost, 'upcoming']
+      );
+      
+      console.log('Booking insert result:', result);
+      
+      // Update slot status
+      await connection.query(
+        'UPDATE parking_slots SET status = ? WHERE id = ?', 
+        ['occupied', slotId]
+      );
+      
+      // Commit transaction
+      await connection.commit();
+      connection.release();
+      
+      // Log this query
+      const endHrTime = process.hrtime(startHrTime);
+      const executionTime = endHrTime[0] * 1000 + endHrTime[1] / 1000000;
+      await logQuery('INSERT INTO bookings', executionTime / 1000);
+      
+      res.status(201).json({ 
+        id: result.insertId,
+        message: 'Booking created successfully' 
+      });
+    } catch (error) {
+      // If error, rollback the transaction
+      await connection.rollback();
+      connection.release();
+      throw error;
+    }
   } catch (error) {
     console.error('Error creating booking:', error);
-    res.status(500).json({ error: 'Failed to create booking' });
+    res.status(500).json({ error: `Failed to create booking: ${error.message}` });
   }
 });
 
@@ -147,18 +172,33 @@ app.put('/api/bookings/:id/cancel', async (req, res) => {
       return res.status(404).json({ error: 'Booking not found' });
     }
     
-    await pool.query('UPDATE bookings SET status = ? WHERE id = ?', ['cancelled', id]);
-    await pool.query('UPDATE parking_slots SET status = ? WHERE id = ?', ['available', booking[0].slot_id]);
+    // Begin transaction
+    const connection = await pool.getConnection();
+    await connection.beginTransaction();
     
-    // Log this query
-    const endHrTime = process.hrtime(startHrTime);
-    const executionTime = endHrTime[0] * 1000 + endHrTime[1] / 1000000;
-    await logQuery('UPDATE parking_slots SET status', executionTime / 1000);
-    
-    res.json({ message: 'Booking cancelled successfully' });
+    try {
+      await connection.query('UPDATE bookings SET status = ? WHERE id = ?', ['cancelled', id]);
+      await connection.query('UPDATE parking_slots SET status = ? WHERE id = ?', ['available', booking[0].slot_id]);
+      
+      // Commit transaction
+      await connection.commit();
+      connection.release();
+      
+      // Log this query
+      const endHrTime = process.hrtime(startHrTime);
+      const executionTime = endHrTime[0] * 1000 + endHrTime[1] / 1000000;
+      await logQuery('UPDATE parking_slots SET status', executionTime / 1000);
+      
+      res.json({ message: 'Booking cancelled successfully' });
+    } catch (error) {
+      // If error, rollback the transaction
+      await connection.rollback();
+      connection.release();
+      throw error;
+    }
   } catch (error) {
     console.error('Error cancelling booking:', error);
-    res.status(500).json({ error: 'Failed to cancel booking' });
+    res.status(500).json({ error: `Failed to cancel booking: ${error.message}` });
   }
 });
 
@@ -182,6 +222,32 @@ app.get('/api/monitor/requests', async (req, res) => {
   } catch (error) {
     console.error('Error fetching database requests:', error);
     res.status(500).json({ error: 'Failed to fetch database requests' });
+  }
+});
+
+// Improved endpoint to check database structure
+app.get('/api/check-db', async (req, res) => {
+  try {
+    // Check if tables exist
+    const [tables] = await pool.query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'parking_system'
+    `);
+    
+    // Get bookings table structure
+    const [bookingsStructure] = await pool.query(`
+      SHOW COLUMNS FROM bookings
+    `);
+    
+    res.json({
+      tables: tables,
+      bookingsStructure: bookingsStructure,
+      message: 'Database structure checked successfully'
+    });
+  } catch (error) {
+    console.error('Error checking database structure:', error);
+    res.status(500).json({ error: 'Failed to check database structure' });
   }
 });
 
