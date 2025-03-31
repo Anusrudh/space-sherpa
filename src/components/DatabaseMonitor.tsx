@@ -10,7 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 
 interface DatabaseRequest {
@@ -25,15 +25,22 @@ interface DatabaseRequest {
 const DatabaseMonitor = () => {
   const [requests, setRequests] = useState<DatabaseRequest[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchDatabaseRequests = async () => {
     setLoading(true);
+    setError(null);
     try {
-      const response = await fetch('http://localhost:3001/api/monitor/requests');
+      // Adding a timestamp parameter to prevent caching
+      const response = await fetch(`http://localhost:3001/api/monitor/requests?t=${Date.now()}`);
+      console.log("API response status:", response.status);
+      
       if (!response.ok) {
-        throw new Error('Failed to fetch database requests');
+        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
       }
+      
       const data = await response.json();
+      console.log("Received data:", data);
       setRequests(data);
       toast({
         title: "Success",
@@ -41,9 +48,10 @@ const DatabaseMonitor = () => {
       });
     } catch (error) {
       console.error('Error fetching database requests:', error);
+      setError(error instanceof Error ? error.message : 'Unknown error occurred');
       toast({
         title: "Error",
-        description: "Failed to load database requests",
+        description: "Failed to load database requests. Check if server is running.",
         variant: "destructive",
       });
     } finally {
@@ -77,6 +85,17 @@ const DatabaseMonitor = () => {
         </Button>
       </div>
 
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-md flex items-center">
+          <AlertCircle className="h-5 w-5 mr-2" />
+          <div>
+            <p className="font-medium">Failed to load database requests</p>
+            <p className="text-sm">{error}</p>
+            <p className="text-sm mt-1">Make sure the server is running on port 3001.</p>
+          </div>
+        </div>
+      )}
+
       <Table>
         <TableCaption>Recent database queries and their performance metrics</TableCaption>
         <TableHeader>
@@ -104,12 +123,18 @@ const DatabaseMonitor = () => {
           ) : (
             <TableRow>
               <TableCell colSpan={5} className="text-center py-4">
-                {loading ? 'Loading...' : 'No database requests found'}
+                {loading ? 'Loading...' : error ? 'Error loading data' : 'No database requests found'}
               </TableCell>
             </TableRow>
           )}
         </TableBody>
       </Table>
+
+      {!loading && !error && requests.length === 0 && (
+        <div className="text-center py-4 text-gray-500">
+          <p>No database activity recorded yet. Try using the application to generate some queries.</p>
+        </div>
+      )}
     </div>
   );
 };
