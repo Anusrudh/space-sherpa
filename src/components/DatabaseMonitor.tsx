@@ -10,8 +10,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, Database, Calendar, List } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { format } from 'date-fns';
 
 interface DatabaseRequest {
   query_type: string;
@@ -22,10 +24,25 @@ interface DatabaseRequest {
   last_executed?: string;
 }
 
+interface Booking {
+  id: number;
+  slot_id: number;
+  vehicle_number: string;
+  start_time: string;
+  end_time: string;
+  total_cost: number;
+  status: string;
+  created_at: string;
+  slot_number?: string;
+}
+
 const DatabaseMonitor = () => {
   const [requests, setRequests] = useState<DatabaseRequest[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const [loadingBookings, setLoadingBookings] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [bookingsError, setBookingsError] = useState<string | null>(null);
 
   const fetchDatabaseRequests = async () => {
     setLoading(true);
@@ -59,82 +76,233 @@ const DatabaseMonitor = () => {
     }
   };
 
+  const fetchBookings = async () => {
+    setLoadingBookings(true);
+    setBookingsError(null);
+    try {
+      const response = await fetch(`http://localhost:3001/api/bookings?t=${Date.now()}`);
+      console.log("Bookings API response status:", response.status);
+      
+      if (!response.ok) {
+        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      console.log("Received bookings data:", data);
+      setBookings(data);
+      toast({
+        title: "Success",
+        description: "Booking details loaded successfully",
+      });
+    } catch (error) {
+      console.error('Error fetching bookings:', error);
+      setBookingsError(error instanceof Error ? error.message : 'Unknown error occurred');
+      toast({
+        title: "Error",
+        description: "Failed to load booking details. Check if server is running.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingBookings(false);
+    }
+  };
+
   useEffect(() => {
     fetchDatabaseRequests();
+    fetchBookings();
     // Set up auto-refresh every 30 seconds
-    const intervalId = setInterval(fetchDatabaseRequests, 30000);
+    const intervalId = setInterval(() => {
+      fetchDatabaseRequests();
+      fetchBookings();
+    }, 30000);
     return () => clearInterval(intervalId);
   }, []);
+
+  const formatDateTime = (dateTime: string) => {
+    try {
+      return format(new Date(dateTime), 'yyyy-MM-dd HH:mm:ss');
+    } catch (error) {
+      return dateTime;
+    }
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Database Request Monitor</h2>
-        <Button 
-          onClick={fetchDatabaseRequests} 
-          disabled={loading}
-          className="bg-parking-primary hover:bg-parking-highlight"
-        >
-          {loading ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Refreshing
-            </>
-          ) : (
-            'Refresh'
-          )}
-        </Button>
+        <h2 className="text-2xl font-bold">Database Monitor</h2>
+        <div>
+          <Button 
+            onClick={() => {
+              fetchDatabaseRequests();
+              fetchBookings();
+            }} 
+            disabled={loading || loadingBookings}
+            className="bg-parking-primary hover:bg-parking-highlight"
+          >
+            {(loading || loadingBookings) ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Refreshing
+              </>
+            ) : (
+              'Refresh All'
+            )}
+          </Button>
+        </div>
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-md flex items-center">
-          <AlertCircle className="h-5 w-5 mr-2" />
-          <div>
-            <p className="font-medium">Failed to load database requests</p>
-            <p className="text-sm">{error}</p>
-            <p className="text-sm mt-1">Make sure the server is running on port 3001.</p>
+      <Tabs defaultValue="queries" className="w-full">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="queries" className="flex items-center">
+            <Database className="w-4 h-4 mr-2" /> Query Stats
+          </TabsTrigger>
+          <TabsTrigger value="bookings" className="flex items-center">
+            <Calendar className="w-4 h-4 mr-2" /> Booking Details
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="queries" className="mt-4">
+          <div className="space-y-4">
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-md flex items-center">
+                <AlertCircle className="h-5 w-5 mr-2" />
+                <div>
+                  <p className="font-medium">Failed to load database requests</p>
+                  <p className="text-sm">{error}</p>
+                  <p className="text-sm mt-1">Make sure the server is running on port 3001.</p>
+                </div>
+              </div>
+            )}
+
+            <Table>
+              <TableCaption>Recent database queries and their performance metrics</TableCaption>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Query Type</TableHead>
+                  <TableHead>Count</TableHead>
+                  <TableHead>Total Time</TableHead>
+                  <TableHead>Average Time</TableHead>
+                  <TableHead>Max Time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {requests.length > 0 ? (
+                  requests.map((request, index) => (
+                    <TableRow key={index}>
+                      <TableCell className="font-medium max-w-md truncate">
+                        {request.query_type}
+                      </TableCell>
+                      <TableCell>{request.count}</TableCell>
+                      <TableCell>{request.total_time}</TableCell>
+                      <TableCell>{request.avg_time}</TableCell>
+                      <TableCell>{request.max_time}</TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-4">
+                      {loading ? 'Loading...' : error ? 'Error loading data' : 'No database requests found'}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+
+            {!loading && !error && requests.length === 0 && (
+              <div className="text-center py-4 text-gray-500">
+                <p>No database activity recorded yet. Try using the application to generate some queries.</p>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        </TabsContent>
 
-      <Table>
-        <TableCaption>Recent database queries and their performance metrics</TableCaption>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Query Type</TableHead>
-            <TableHead>Count</TableHead>
-            <TableHead>Total Time</TableHead>
-            <TableHead>Average Time</TableHead>
-            <TableHead>Max Time</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {requests.length > 0 ? (
-            requests.map((request, index) => (
-              <TableRow key={index}>
-                <TableCell className="font-medium max-w-md truncate">
-                  {request.query_type}
-                </TableCell>
-                <TableCell>{request.count}</TableCell>
-                <TableCell>{request.total_time}</TableCell>
-                <TableCell>{request.avg_time}</TableCell>
-                <TableCell>{request.max_time}</TableCell>
-              </TableRow>
-            ))
-          ) : (
-            <TableRow>
-              <TableCell colSpan={5} className="text-center py-4">
-                {loading ? 'Loading...' : error ? 'Error loading data' : 'No database requests found'}
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+        <TabsContent value="bookings" className="mt-4">
+          <div className="space-y-4">
+            {bookingsError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-md flex items-center">
+                <AlertCircle className="h-5 w-5 mr-2" />
+                <div>
+                  <p className="font-medium">Failed to load booking details</p>
+                  <p className="text-sm">{bookingsError}</p>
+                  <p className="text-sm mt-1">Make sure the server is running on port 3001.</p>
+                </div>
+              </div>
+            )}
+            
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-semibold flex items-center">
+                <List className="w-5 h-5 mr-2" /> Booking Records
+              </h3>
+              <Button 
+                onClick={fetchBookings} 
+                disabled={loadingBookings}
+                variant="outline"
+                size="sm"
+              >
+                {loadingBookings ? (
+                  <>
+                    <Loader2 className="mr-2 h-3 w-3 animate-spin" /> Refreshing
+                  </>
+                ) : (
+                  'Refresh Bookings'
+                )}
+              </Button>
+            </div>
 
-      {!loading && !error && requests.length === 0 && (
-        <div className="text-center py-4 text-gray-500">
-          <p>No database activity recorded yet. Try using the application to generate some queries.</p>
-        </div>
-      )}
+            <Table>
+              <TableCaption>All booking records from the database</TableCaption>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>ID</TableHead>
+                  <TableHead>Slot</TableHead>
+                  <TableHead>Vehicle</TableHead>
+                  <TableHead>Start Time</TableHead>
+                  <TableHead>End Time</TableHead>
+                  <TableHead>Cost</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Created</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {bookings.length > 0 ? (
+                  bookings.map((booking) => (
+                    <TableRow key={booking.id}>
+                      <TableCell>{booking.id}</TableCell>
+                      <TableCell>{booking.slot_number || booking.slot_id}</TableCell>
+                      <TableCell>{booking.vehicle_number}</TableCell>
+                      <TableCell>{formatDateTime(booking.start_time)}</TableCell>
+                      <TableCell>{formatDateTime(booking.end_time)}</TableCell>
+                      <TableCell>${booking.total_cost.toFixed(2)}</TableCell>
+                      <TableCell>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          booking.status === 'active' ? 'bg-green-100 text-green-800' :
+                          booking.status === 'upcoming' ? 'bg-blue-100 text-blue-800' :
+                          booking.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {booking.status}
+                        </span>
+                      </TableCell>
+                      <TableCell>{formatDateTime(booking.created_at)}</TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-4">
+                      {loadingBookings ? 'Loading...' : bookingsError ? 'Error loading data' : 'No bookings found'}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+
+            {!loadingBookings && !bookingsError && bookings.length === 0 && (
+              <div className="text-center py-4 text-gray-500">
+                <p>No booking records found. Try creating a booking in the application.</p>
+              </div>
+            )}
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
