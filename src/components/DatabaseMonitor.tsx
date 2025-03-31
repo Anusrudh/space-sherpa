@@ -90,6 +90,11 @@ const DatabaseMonitor = () => {
       const data = await response.json();
       console.log("Received bookings data:", data);
       setBookings(data);
+      
+      if (data.length === 0) {
+        console.log("No bookings found in the database");
+      }
+      
       toast({
         title: "Success",
         description: "Booking details loaded successfully",
@@ -125,12 +130,51 @@ const DatabaseMonitor = () => {
       return dateTime;
     }
   };
+  
+  // Function to create a sample booking for testing
+  const createSampleBooking = async () => {
+    try {
+      const response = await fetch('http://localhost:3001/api/bookings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          slotId: 1,
+          vehicleNumber: 'TEST-1234',
+          startTime: new Date().toISOString(),
+          endTime: new Date(Date.now() + 3600000).toISOString(),
+          totalCost: 10.00
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      console.log("Created sample booking:", data);
+      toast({
+        title: "Success",
+        description: "Sample booking created successfully",
+      });
+      // Refresh the bookings list
+      fetchBookings();
+    } catch (error) {
+      console.error('Error creating sample booking:', error);
+      toast({
+        title: "Error",
+        description: "Failed to create sample booking",
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Database Monitor</h2>
-        <div>
+        <div className="flex gap-2">
           <Button 
             onClick={() => {
               fetchDatabaseRequests();
@@ -147,10 +191,17 @@ const DatabaseMonitor = () => {
               'Refresh All'
             )}
           </Button>
+          <Button 
+            onClick={createSampleBooking}
+            variant="outline"
+            className="border-parking-primary text-parking-primary hover:bg-parking-primary/10"
+          >
+            Create Test Booking
+          </Button>
         </div>
       </div>
 
-      <Tabs defaultValue="queries" className="w-full">
+      <Tabs defaultValue="bookings" className="w-full">
         <TabsList className="grid w-full max-w-md grid-cols-2">
           <TabsTrigger value="queries" className="flex items-center">
             <Database className="w-4 h-4 mr-2" /> Query Stats
@@ -185,7 +236,14 @@ const DatabaseMonitor = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {requests.length > 0 ? (
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-4">
+                      <Loader2 className="h-5 w-5 animate-spin mx-auto" />
+                      <p className="mt-2">Loading database requests...</p>
+                    </TableCell>
+                  </TableRow>
+                ) : requests.length > 0 ? (
                   requests.map((request, index) => (
                     <TableRow key={index}>
                       <TableCell className="font-medium max-w-md truncate">
@@ -200,7 +258,7 @@ const DatabaseMonitor = () => {
                 ) : (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-4">
-                      {loading ? 'Loading...' : error ? 'Error loading data' : 'No database requests found'}
+                      {error ? 'Error loading data' : 'No database requests found'}
                     </TableCell>
                   </TableRow>
                 )}
@@ -263,7 +321,14 @@ const DatabaseMonitor = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {bookings.length > 0 ? (
+                {loadingBookings ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-4">
+                      <Loader2 className="h-5 w-5 animate-spin mx-auto" />
+                      <p className="mt-2">Loading booking records...</p>
+                    </TableCell>
+                  </TableRow>
+                ) : bookings.length > 0 ? (
                   bookings.map((booking) => (
                     <TableRow key={booking.id}>
                       <TableCell>{booking.id}</TableCell>
@@ -288,7 +353,7 @@ const DatabaseMonitor = () => {
                 ) : (
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-4">
-                      {loadingBookings ? 'Loading...' : bookingsError ? 'Error loading data' : 'No bookings found'}
+                      {bookingsError ? 'Error loading data' : 'No bookings found'}
                     </TableCell>
                   </TableRow>
                 )}
@@ -296,8 +361,17 @@ const DatabaseMonitor = () => {
             </Table>
 
             {!loadingBookings && !bookingsError && bookings.length === 0 && (
-              <div className="text-center py-4 text-gray-500">
-                <p>No booking records found. Try creating a booking in the application.</p>
+              <div className="text-center py-8 border rounded-md bg-gray-50">
+                <Calendar className="h-10 w-10 text-gray-400 mx-auto mb-2" />
+                <p className="text-gray-500">No booking records found in the database.</p>
+                <Button 
+                  onClick={createSampleBooking}
+                  variant="outline"
+                  size="sm"
+                  className="mt-4"
+                >
+                  Create Test Booking
+                </Button>
               </div>
             )}
           </div>

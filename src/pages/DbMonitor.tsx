@@ -13,7 +13,7 @@ const DbMonitor = () => {
       <div className="bg-parking-primary text-white py-8">
         <div className="container mx-auto px-4">
           <h1 className="text-3xl font-bold">Database Monitoring</h1>
-          <p className="text-lg">View and analyze MySQL database requests</p>
+          <p className="text-lg">View and analyze MySQL database requests and booking records</p>
         </div>
       </div>
       
