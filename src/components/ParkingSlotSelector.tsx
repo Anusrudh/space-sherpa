@@ -1,116 +1,122 @@
-import React, { useState, useEffect } from 'react';
-import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
-import { toast } from "@/components/ui/use-toast";
 
-interface DatabaseRequest {
-  query_type: string;
-  count: number;
-  total_time: string;
-  avg_time: string;
-  max_time: string;
-  last_executed?: string;
+import React from 'react';
+import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/use-toast";
+import { cn } from "@/lib/utils";
+
+export interface ParkingSlot {
+  id: string;
+  number: string;
+  status: 'available' | 'occupied' | 'selected';
 }
 
-const DatabaseMonitor = () => {
-  const [requests, setRequests] = useState<DatabaseRequest[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
+interface ParkingSlotSelectorProps {
+  slots: ParkingSlot[];
+  selectedSlot: string | null;
+  onSelectSlot: (slotId: string) => void;
+}
 
-  const fetchDatabaseRequests = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch('http://localhost:3001/api/monitor/requests');
-      if (!response.ok) {
-        throw new Error('Failed to fetch database requests');
-      }
-      const data = await response.json();
-      setRequests(data);
+const ParkingSlotSelector: React.FC<ParkingSlotSelectorProps> = ({ slots, selectedSlot, onSelectSlot }) => {
+  const handleSlotClick = (slot: ParkingSlot) => {
+    if (slot.status === 'occupied') {
       toast({
-        title: "Success",
-        description: "Database requests loaded successfully",
-      });
-    } catch (error) {
-      console.error('Error fetching database requests:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load database requests",
+        title: "Unavailable",
+        description: `Parking slot ${slot.number} is already occupied.`,
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
+      return;
     }
+    
+    onSelectSlot(slot.id);
+    
+    toast({
+      title: "Selected",
+      description: `You've selected parking slot ${slot.number}.`,
+    });
   };
 
-  useEffect(() => {
-    fetchDatabaseRequests();
-    // Set up auto-refresh every 30 seconds
-    const intervalId = setInterval(fetchDatabaseRequests, 30000);
-    return () => clearInterval(intervalId);
-  }, []);
+  // Group slots by row (e.g., A1, A2 belong to row A)
+  const slotsByRow = slots.reduce((acc, slot) => {
+    const row = slot.number.charAt(0);
+    if (!acc[row]) acc[row] = [];
+    acc[row].push(slot);
+    return acc;
+  }, {} as Record<string, ParkingSlot[]>);
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Database Request Monitor</h2>
-        <Button 
-          onClick={fetchDatabaseRequests} 
-          disabled={loading}
-          className="bg-parking-primary hover:bg-parking-highlight"
-        >
-          {loading ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Refreshing
-            </>
-          ) : (
-            'Refresh'
-          )}
-        </Button>
+        <h2 className="text-xl font-bold">Select a Parking Slot</h2>
       </div>
-
-      <Table>
-        <TableCaption>Recent database queries and their performance metrics</TableCaption>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Query Type</TableHead>
-            <TableHead>Count</TableHead>
-            <TableHead>Total Time</TableHead>
-            <TableHead>Average Time</TableHead>
-            <TableHead>Max Time</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {requests.length > 0 ? (
-            requests.map((request, index) => (
-              <TableRow key={index}>
-                <TableCell className="font-medium max-w-md truncate">
-                  {request.query_type}
-                </TableCell>
-                <TableCell>{request.count}</TableCell>
-                <TableCell>{request.total_time}</TableCell>
-                <TableCell>{request.avg_time}</TableCell>
-                <TableCell>{request.max_time}</TableCell>
-              </TableRow>
-            ))
-          ) : (
-            <TableRow>
-              <TableCell colSpan={5} className="text-center py-4">
-                {loading ? 'Loading...' : 'No database requests found'}
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+      
+      <div className="space-y-8">
+        {/* Legend */}
+        <div className="flex flex-wrap gap-4 items-center justify-center">
+          <div className="flex items-center">
+            <div className="w-6 h-6 bg-green-100 border border-green-500 rounded-md mr-2"></div>
+            <span className="text-sm">Available</span>
+          </div>
+          <div className="flex items-center">
+            <div className="w-6 h-6 bg-red-100 border border-red-500 rounded-md mr-2"></div>
+            <span className="text-sm">Occupied</span>
+          </div>
+          <div className="flex items-center">
+            <div className="w-6 h-6 bg-blue-100 border border-blue-500 rounded-md mr-2"></div>
+            <span className="text-sm">Selected</span>
+          </div>
+        </div>
+        
+        {/* Parking lot visualization */}
+        <div className="bg-gray-100 p-6 rounded-lg">
+          <div className="flex justify-center mb-8">
+            <div className="bg-gray-300 text-center py-2 px-12 rounded-lg">
+              <span className="font-bold">ENTRANCE</span>
+            </div>
+          </div>
+          
+          {/* Parking slots by row */}
+          <div className="space-y-4">
+            {Object.keys(slotsByRow).map(row => (
+              <div key={row} className="flex justify-center space-x-2">
+                <div className="w-6 flex items-center justify-center font-bold text-gray-500">
+                  {row}
+                </div>
+                <div className="flex space-x-2">
+                  {slotsByRow[row].map(slot => (
+                    <Button
+                      key={slot.id}
+                      onClick={() => handleSlotClick(slot)}
+                      disabled={slot.status === 'occupied'}
+                      className={cn(
+                        "w-12 h-12 p-0 font-bold",
+                        slot.status === 'available' ? "bg-green-100 text-green-800 hover:bg-green-200 border border-green-500" : 
+                        slot.status === 'occupied' ? "bg-red-100 text-red-800 cursor-not-allowed border border-red-500" :
+                        "bg-blue-100 text-blue-800 border border-blue-500",
+                        selectedSlot === slot.id && "bg-blue-100 text-blue-800 border-2 border-blue-500"
+                      )}
+                    >
+                      {slot.number}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        
+        {selectedSlot && (
+          <div className="text-center">
+            <p className="text-lg">
+              You've selected spot{" "}
+              <span className="font-bold text-parking-primary">
+                {slots.find(slot => slot.id === selectedSlot)?.number}
+              </span>
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
 
-export default DatabaseMonitor;
+export default ParkingSlotSelector;
