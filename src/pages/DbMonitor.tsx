@@ -71,7 +71,7 @@ const DbMonitor = () => {
           if (bookingResponse.ok) {
             toast({
               title: "Test Booking Created",
-              description: `Created booking for vehicle ${bookingData.booking.vehicleNumber} in slot ${bookingData.booking.slot_number}`,
+              description: `Created booking for vehicle ${bookingData.booking?.vehicleNumber || 'Unknown'} in slot ${bookingData.booking?.slot_number || 'Unknown'}`,
               variant: "default"
             });
             
@@ -87,7 +87,7 @@ const DbMonitor = () => {
             if (verifyBookingResponse.ok) {
               const bookingsCount = bookingsData.length;
               const foundTestBooking = bookingsData.some((b: any) => 
-                b.vehicle_number === bookingData.booking.vehicleNumber
+                b.vehicle_number === (bookingData.booking?.vehicleNumber || '')
               );
               
               if (foundTestBooking) {

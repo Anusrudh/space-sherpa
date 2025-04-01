@@ -37,8 +37,9 @@ interface Booking {
 }
 
 interface DbStructure {
-  tables: any[];
-  bookingsStructure: any[];
+  tables: string[];
+  structures: { [key: string]: any[] };
+  recordCounts: { [key: string]: number };
   message: string;
 }
 
@@ -485,9 +486,9 @@ const DatabaseMonitor = () => {
                 <div>
                   <h4 className="text-md font-medium mb-2">Tables in Database:</h4>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                    {dbStructure.tables.map((table: any, index: number) => (
+                    {dbStructure.tables && dbStructure.tables.map((table: string, index: number) => (
                       <div key={index} className="bg-gray-100 p-3 rounded-md">
-                        {table.table_name}
+                        {table}
                       </div>
                     ))}
                   </div>
@@ -495,30 +496,36 @@ const DatabaseMonitor = () => {
                 
                 <div>
                   <h4 className="text-md font-medium mb-2">Bookings Table Structure:</h4>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Field</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Null</TableHead>
-                        <TableHead>Key</TableHead>
-                        <TableHead>Default</TableHead>
-                        <TableHead>Extra</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {dbStructure.bookingsStructure.map((column: any, index: number) => (
-                        <TableRow key={index}>
-                          <TableCell>{column.Field}</TableCell>
-                          <TableCell>{column.Type}</TableCell>
-                          <TableCell>{column.Null}</TableCell>
-                          <TableCell>{column.Key}</TableCell>
-                          <TableCell>{column.Default || '-'}</TableCell>
-                          <TableCell>{column.Extra || '-'}</TableCell>
+                  {dbStructure.structures && dbStructure.structures.bookings ? (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Field</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead>Null</TableHead>
+                          <TableHead>Key</TableHead>
+                          <TableHead>Default</TableHead>
+                          <TableHead>Extra</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {dbStructure.structures.bookings.map((column: any, index: number) => (
+                          <TableRow key={index}>
+                            <TableCell>{column.Field}</TableCell>
+                            <TableCell>{column.Type}</TableCell>
+                            <TableCell>{column.Null}</TableCell>
+                            <TableCell>{column.Key}</TableCell>
+                            <TableCell>{column.Default || '-'}</TableCell>
+                            <TableCell>{column.Extra || '-'}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  ) : (
+                    <div className="p-4 bg-yellow-50 text-yellow-700 rounded-md">
+                      <p>Bookings table structure not available. Please check if the table exists.</p>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
