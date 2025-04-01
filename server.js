@@ -1,4 +1,3 @@
-
 const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
@@ -10,13 +9,44 @@ const port = 3001;
 app.use(cors());
 app.use(express.json());
 
-// MySQL Connection Pool
+// MySQL Connection Pool with better error handling
 const pool = mysql.createPool({
   host: 'localhost',
   user: 'root',     // Update with your MySQL username
   password: '',     // Update with your MySQL password
-  database: 'parking_system'
+  database: 'parking_system',
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+  debug: false
 });
+
+// Validate database connection on startup
+(async () => {
+  try {
+    const connection = await pool.getConnection();
+    console.log('Database connection successful on startup!');
+    
+    // Check if tables exist
+    const [tables] = await connection.query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'parking_system'
+    `);
+    
+    console.log('Available tables:', tables.map(t => t.TABLE_NAME || t.table_name));
+    
+    if (!tables.some(t => (t.TABLE_NAME || t.table_name) === 'bookings')) {
+      console.error('WARNING: bookings table does not exist in database!');
+      console.log('Please run the database-setup.sql script to create the required tables');
+    }
+    
+    connection.release();
+  } catch (error) {
+    console.error('FATAL: Database connection failed on startup:', error);
+    console.log('Please check your MySQL connection settings and ensure the server is running');
+  }
+})();
 
 // Simple query logging middleware to track database usage
 const logQuery = async (queryType, executionTime) => {
@@ -83,10 +113,12 @@ app.get('/api/slots', async (req, res) => {
   }
 });
 
-// Get booking history
+// Get booking history with additional logging
 app.get('/api/bookings', async (req, res) => {
   const startTime = process.hrtime();
   try {
+    console.log('Attempting to fetch bookings from database...');
+    
     const [rows] = await pool.query(`
       SELECT b.*, ps.number as slot_number 
       FROM bookings b
@@ -99,22 +131,38 @@ app.get('/api/bookings', async (req, res) => {
     const executionTime = endTime[0] * 1000 + endTime[1] / 1000000; // Convert to milliseconds
     await logQuery('SELECT * FROM bookings', executionTime / 1000); // Convert to seconds
     
-    console.log('Fetched bookings:', rows);
+    console.log(`Successfully fetched ${rows.length} bookings from database`);
     res.json(rows);
   } catch (error) {
     console.error('Error fetching bookings:', error);
-    res.status(500).json({ error: 'Failed to fetch bookings' });
+    res.status(500).json({ error: `Failed to fetch bookings: ${error.message}` });
   }
 });
 
-// Create a new booking
+// Create a new booking with enhanced debugging
 app.post('/api/bookings', async (req, res) => {
   const { slotId, vehicleNumber, startTime, endTime, totalCost } = req.body;
   const startHrTime = process.hrtime();
   
+  console.log('-------- CREATE BOOKING REQUEST --------');
   console.log('Received booking data:', req.body);
   
+  // Validate required fields
+  if (!slotId || !vehicleNumber || !startTime || !endTime) {
+    console.error('Booking validation failed: Missing required fields');
+    return res.status(400).json({ error: 'Missing required booking fields' });
+  }
+  
   try {
+    // First, verify if the slot exists
+    const [slotCheck] = await pool.query('SELECT * FROM parking_slots WHERE id = ?', [slotId]);
+    if (slotCheck.length === 0) {
+      console.error(`Slot ID ${slotId} does not exist in the database`);
+      return res.status(404).json({ error: 'Parking slot not found' });
+    }
+    
+    console.log('Slot found in database:', slotCheck[0]);
+    
     // Begin transaction
     const connection = await pool.getConnection();
     await connection.beginTransaction();
@@ -122,6 +170,7 @@ app.post('/api/bookings', async (req, res) => {
     try {
       // Insert the booking record
       console.log('Inserting booking with values:', [slotId, vehicleNumber, startTime, endTime, totalCost, 'upcoming']);
+      
       const [result] = await connection.query(
         'INSERT INTO bookings (slot_id, vehicle_number, start_time, end_time, total_cost, status) VALUES (?, ?, ?, ?, ?, ?)',
         [slotId, vehicleNumber, startTime, endTime, totalCost, 'upcoming']
@@ -130,6 +179,7 @@ app.post('/api/bookings', async (req, res) => {
       console.log('Booking insert result:', result);
       
       // Update slot status
+      console.log(`Updating slot ${slotId} status to "occupied"`);
       await connection.query(
         'UPDATE parking_slots SET status = ? WHERE id = ?', 
         ['occupied', slotId]
@@ -137,6 +187,7 @@ app.post('/api/bookings', async (req, res) => {
       
       // Commit transaction
       await connection.commit();
+      console.log('Transaction successfully committed');
       connection.release();
       
       // Log this query
@@ -148,14 +199,17 @@ app.post('/api/bookings', async (req, res) => {
         id: result.insertId,
         message: 'Booking created successfully' 
       });
+      console.log('-------- CREATE BOOKING SUCCESS --------');
     } catch (error) {
       // If error, rollback the transaction
       await connection.rollback();
       connection.release();
+      console.error('Transaction rolled back due to error:', error);
       throw error;
     }
   } catch (error) {
     console.error('Error creating booking:', error);
+    console.log('-------- CREATE BOOKING FAILED --------');
     res.status(500).json({ error: `Failed to create booking: ${error.message}` });
   }
 });
@@ -225,7 +279,7 @@ app.get('/api/monitor/requests', async (req, res) => {
   }
 });
 
-// Improved endpoint to check database structure
+// Enhanced endpoint to check database structure
 app.get('/api/check-db', async (req, res) => {
   try {
     // Check if tables exist
@@ -235,22 +289,98 @@ app.get('/api/check-db', async (req, res) => {
       WHERE table_schema = 'parking_system'
     `);
     
-    // Get bookings table structure
-    const [bookingsStructure] = await pool.query(`
-      SHOW COLUMNS FROM bookings
-    `);
+    // Get important table structures
+    const tableStructures = {};
+    
+    if (tables.length > 0) {
+      for (const table of tables) {
+        const tableName = table.TABLE_NAME || table.table_name;
+        const [columns] = await pool.query(`SHOW COLUMNS FROM ${tableName}`);
+        tableStructures[tableName] = columns;
+      }
+    }
+    
+    // Get sample data counts
+    const counts = {};
+    for (const tableName in tableStructures) {
+      const [countResult] = await pool.query(`SELECT COUNT(*) as count FROM ${tableName}`);
+      counts[tableName] = countResult[0].count;
+    }
     
     res.json({
-      tables: tables,
-      bookingsStructure: bookingsStructure,
+      tables: tables.map(t => t.TABLE_NAME || t.table_name),
+      structures: tableStructures,
+      recordCounts: counts,
       message: 'Database structure checked successfully'
     });
   } catch (error) {
     console.error('Error checking database structure:', error);
-    res.status(500).json({ error: 'Failed to check database structure' });
+    res.status(500).json({ error: `Failed to check database structure: ${error.message}` });
+  }
+});
+
+// Add a way to create test booking data directly from the API
+app.post('/api/test/create-booking', async (req, res) => {
+  try {
+    // First get an available slot
+    const [slots] = await pool.query('SELECT * FROM parking_slots WHERE status = "available" LIMIT 1');
+    
+    if (slots.length === 0) {
+      return res.status(404).json({ error: 'No available slots found' });
+    }
+    
+    const slot = slots[0];
+    const bookingData = {
+      slotId: slot.id,
+      vehicleNumber: `TEST-${Math.floor(Math.random() * 10000)}`,
+      startTime: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      endTime: new Date(Date.now() + 3600000).toISOString().slice(0, 19).replace('T', ' '),
+      totalCost: 25.00
+    };
+    
+    // Begin transaction
+    const connection = await pool.getConnection();
+    await connection.beginTransaction();
+    
+    try {
+      // Insert the booking record
+      console.log('Creating test booking with data:', bookingData);
+      
+      const [result] = await connection.query(
+        'INSERT INTO bookings (slot_id, vehicle_number, start_time, end_time, total_cost, status) VALUES (?, ?, ?, ?, ?, ?)',
+        [bookingData.slotId, bookingData.vehicleNumber, bookingData.startTime, bookingData.endTime, bookingData.totalCost, 'upcoming']
+      );
+      
+      // Update slot status
+      await connection.query(
+        'UPDATE parking_slots SET status = ? WHERE id = ?', 
+        ['occupied', bookingData.slotId]
+      );
+      
+      // Commit transaction
+      await connection.commit();
+      connection.release();
+      
+      res.status(201).json({
+        message: 'Test booking created successfully',
+        booking: {
+          id: result.insertId,
+          ...bookingData,
+          slot_number: slot.number
+        }
+      });
+    } catch (error) {
+      await connection.rollback();
+      connection.release();
+      throw error;
+    }
+  } catch (error) {
+    console.error('Error creating test booking:', error);
+    res.status(500).json({ error: `Failed to create test booking: ${error.message}` });
   }
 });
 
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
+  console.log(`Access database monitor at http://localhost:${port}/api/check-db`);
 });
