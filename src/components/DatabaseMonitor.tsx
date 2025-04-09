@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import {
   Table,
@@ -14,6 +13,12 @@ import { Loader2, AlertCircle, Database, Calendar, List, RefreshCw } from "lucid
 import { toast } from "@/components/ui/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { format } from 'date-fns';
+import { 
+  fetchAllBookings, 
+  fetchDatabaseMonitoring, 
+  createTestBooking, 
+  fetchAllSlots
+} from '@/integrations/supabase/utils';
 
 interface DatabaseRequest {
   query_type: string;
@@ -57,16 +62,7 @@ const DatabaseMonitor = () => {
     setLoading(true);
     setError(null);
     try {
-      // Adding a timestamp parameter to prevent caching
-      const response = await fetch(`http://localhost:3001/api/monitor/requests?t=${Date.now()}`);
-      console.log("API response status:", response.status);
-      
-      if (!response.ok) {
-        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-      console.log("Received data:", data);
+      const data = await fetchDatabaseMonitoring();
       setRequests(data);
       toast({
         title: "Success",
@@ -77,7 +73,7 @@ const DatabaseMonitor = () => {
       setError(error instanceof Error ? error.message : 'Unknown error occurred');
       toast({
         title: "Error",
-        description: "Failed to load database requests. Check if server is running.",
+        description: "Failed to load database requests.",
         variant: "destructive",
       });
     } finally {
@@ -89,15 +85,7 @@ const DatabaseMonitor = () => {
     setLoadingBookings(true);
     setBookingsError(null);
     try {
-      const response = await fetch(`http://localhost:3001/api/bookings?t=${Date.now()}`);
-      console.log("Bookings API response status:", response.status);
-      
-      if (!response.ok) {
-        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-      console.log("Received bookings data:", data);
+      const data = await fetchAllBookings();
       setBookings(data);
       
       if (data.length === 0) {
@@ -113,7 +101,7 @@ const DatabaseMonitor = () => {
       setBookingsError(error instanceof Error ? error.message : 'Unknown error occurred');
       toast({
         title: "Error",
-        description: "Failed to load booking details. Check if server is running.",
+        description: "Failed to load booking details.",
         variant: "destructive",
       });
     } finally {
@@ -124,14 +112,22 @@ const DatabaseMonitor = () => {
   const checkDatabaseStructure = async () => {
     setLoadingStructure(true);
     try {
-      const response = await fetch(`http://localhost:3001/api/check-db?t=${Date.now()}`);
+      const tables = ['parking_slots.csv', 'bookings', 'db_monitoring'];
+      const structures = {};
+      const recordCounts = {};
       
-      if (!response.ok) {
-        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+      for (const table of tables) {
+        const { count, error } = await fetchTableCount(table);
+        recordCounts[table] = count || 0;
       }
       
-      const data = await response.json();
-      console.log("Database structure:", data);
+      const data = {
+        tables,
+        structures,
+        recordCounts,
+        message: 'Database structure checked successfully'
+      };
+      
       setDbStructure(data);
       
       toast({
@@ -147,6 +143,23 @@ const DatabaseMonitor = () => {
       });
     } finally {
       setLoadingStructure(false);
+    }
+  };
+  
+  const fetchTableCount = async (table: string) => {
+    try {
+      const { count, error } = await fetch(`https://eqcgrqjucmdojzanemwa.supabase.co/rest/v1/${table}?select=count`, {
+        headers: {
+          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVxY2dycWp1Y21kb2p6YW5lbXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQxMjc0NjksImV4cCI6MjA1OTcwMzQ2OX0.isjpmrExC4CiaBrF__Y3LBwRJ2dUf012Lt9awq-G9Xs',
+          'Content-Type': 'application/json',
+          'Prefer': 'count=exact'
+        }
+      }).then(res => res.json());
+      
+      return { count: count || 0, error };
+    } catch (error) {
+      console.error(`Error fetching count for ${table}:`, error);
+      return { count: 0, error };
     }
   };
 
@@ -170,63 +183,15 @@ const DatabaseMonitor = () => {
     }
   };
   
-  // Function to create a sample booking for testing
   const createSampleBooking = async () => {
     try {
-      // Get a valid slot ID from the database first
-      const slotsResponse = await fetch('http://localhost:3001/api/slots');
-      if (!slotsResponse.ok) {
-        throw new Error(`Failed to fetch slots: ${slotsResponse.statusText}`);
-      }
-      
-      const slots = await slotsResponse.json();
-      console.log("Available slots:", slots);
-      
-      // Find an available slot
-      const availableSlot = slots.find((slot: any) => slot.status === 'available');
-      
-      if (!availableSlot) {
-        throw new Error('No available parking slots found');
-      }
-      
-      const slotId = availableSlot.id;
-      console.log(`Using slot ID: ${slotId} for test booking`);
-      
-      // Create a booking with the found slot
-      const bookingData = {
-        slotId: slotId,
-        vehicleNumber: `TEST-${Math.floor(1000 + Math.random() * 9000)}`,
-        startTime: new Date().toISOString(),
-        endTime: new Date(Date.now() + 3600000).toISOString(), // 1 hour later
-        totalCost: 10.00
-      };
-      
-      console.log("Sending booking data:", bookingData);
-      
-      const response = await fetch('http://localhost:3001/api/bookings', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(bookingData),
-      });
-      
-      console.log("Booking creation response status:", response.status);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to create booking: ${errorText}`);
-      }
-      
-      const data = await response.json();
-      console.log("Created sample booking:", data);
+      const result = await createTestBooking();
       
       toast({
         title: "Success",
         description: "Sample booking created successfully",
       });
       
-      // Refresh the bookings list
       fetchBookings();
     } catch (error) {
       console.error('Error creating sample booking:', error);
@@ -285,7 +250,6 @@ const DatabaseMonitor = () => {
           </TabsTrigger>
         </TabsList>
 
-        {/* Query statistics tab content */}
         <TabsContent value="queries" className="mt-4">
           <div className="space-y-4">
             {error && (
@@ -294,7 +258,7 @@ const DatabaseMonitor = () => {
                 <div>
                   <p className="font-medium">Failed to load database requests</p>
                   <p className="text-sm">{error}</p>
-                  <p className="text-sm mt-1">Make sure the server is running on port 3001.</p>
+                  <p className="text-sm mt-1">Make sure your Supabase project is properly configured.</p>
                 </div>
               </div>
             )}
@@ -348,7 +312,6 @@ const DatabaseMonitor = () => {
           </div>
         </TabsContent>
 
-        {/* Bookings tab content */}
         <TabsContent value="bookings" className="mt-4">
           <div className="space-y-4">
             {bookingsError && (
@@ -357,7 +320,7 @@ const DatabaseMonitor = () => {
                 <div>
                   <p className="font-medium">Failed to load booking details</p>
                   <p className="text-sm">{bookingsError}</p>
-                  <p className="text-sm mt-1">Make sure the server is running on port 3001.</p>
+                  <p className="text-sm mt-1">Make sure your Supabase project is properly configured.</p>
                 </div>
               </div>
             )}
@@ -412,7 +375,7 @@ const DatabaseMonitor = () => {
                       <TableCell>{booking.vehicle_number}</TableCell>
                       <TableCell>{formatDateTime(booking.start_time)}</TableCell>
                       <TableCell>{formatDateTime(booking.end_time)}</TableCell>
-                      <TableCell>${booking.total_cost.toFixed(2)}</TableCell>
+                      <TableCell>${typeof booking.total_cost === 'number' ? booking.total_cost.toFixed(2) : booking.total_cost}</TableCell>
                       <TableCell>
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                           booking.status === 'active' ? 'bg-green-100 text-green-800' :
@@ -453,7 +416,6 @@ const DatabaseMonitor = () => {
           </div>
         </TabsContent>
 
-        {/* DB Structure tab content */}
         <TabsContent value="structure" className="mt-4">
           <div className="space-y-4">
             <div className="flex justify-between items-center">
@@ -495,37 +457,23 @@ const DatabaseMonitor = () => {
                 </div>
                 
                 <div>
-                  <h4 className="text-md font-medium mb-2">Bookings Table Structure:</h4>
-                  {dbStructure.structures && dbStructure.structures.bookings ? (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Field</TableHead>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Null</TableHead>
-                          <TableHead>Key</TableHead>
-                          <TableHead>Default</TableHead>
-                          <TableHead>Extra</TableHead>
+                  <h4 className="text-md font-medium mb-2">Record Counts:</h4>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Table</TableHead>
+                        <TableHead>Records</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {Object.entries(dbStructure.recordCounts || {}).map(([table, count], index) => (
+                        <TableRow key={index}>
+                          <TableCell>{table}</TableCell>
+                          <TableCell>{count}</TableCell>
                         </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {dbStructure.structures.bookings.map((column: any, index: number) => (
-                          <TableRow key={index}>
-                            <TableCell>{column.Field}</TableCell>
-                            <TableCell>{column.Type}</TableCell>
-                            <TableCell>{column.Null}</TableCell>
-                            <TableCell>{column.Key}</TableCell>
-                            <TableCell>{column.Default || '-'}</TableCell>
-                            <TableCell>{column.Extra || '-'}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  ) : (
-                    <div className="p-4 bg-yellow-50 text-yellow-700 rounded-md">
-                      <p>Bookings table structure not available. Please check if the table exists.</p>
-                    </div>
-                  )}
+                      ))}
+                    </TableBody>
+                  </Table>
                 </div>
               </div>
             ) : (

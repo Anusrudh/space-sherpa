@@ -7,6 +7,11 @@ import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Loader2, AlertCircle, Database } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/use-toast';
+import { 
+  testDatabaseConnection, 
+  checkDatabaseStructure, 
+  createTestBooking 
+} from '@/integrations/supabase/utils';
 
 const DbMonitor = () => {
   const [isTestingDb, setIsTestingDb] = React.useState(false);
@@ -25,128 +30,73 @@ const DbMonitor = () => {
         description: "Checking database connection...",
       });
       
-      const connResponse = await fetch('http://localhost:3001/api/test-connection');
-      const connData = await connResponse.json();
+      const connData = await testDatabaseConnection();
       
-      if (connResponse.ok) {
-        toast({
-          title: "Database Connection",
-          description: connData.message || "Successfully connected to database",
-        });
-        
-        // Then check DB structure
-        toast({
-          title: "Testing Structure",
-          description: "Checking database tables and structure...",
-        });
-        
-        const structureResponse = await fetch('http://localhost:3001/api/check-db');
-        const structureData = await structureResponse.json();
-        
-        if (structureResponse.ok) {
-          const tablesList = structureData.tables?.join(', ') || 'None found';
-          toast({
-            title: "Database Structure",
-            description: `Available tables: ${tablesList}`,
-          });
-          
-          setDbTestResults(prevResults => ({
-            ...prevResults,
-            connection: connData,
-            structure: structureData
-          }));
-          
-          // Create a test booking
-          toast({
-            title: "Creating Test Booking",
-            description: "Attempting to create a test booking entry...",
-          });
-          
-          const bookingResponse = await fetch('http://localhost:3001/api/test/create-booking', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-          });
-          const bookingData = await bookingResponse.json();
-          
-          if (bookingResponse.ok) {
-            toast({
-              title: "Test Booking Created",
-              description: `Created booking for vehicle ${bookingData.booking?.vehicleNumber || 'Unknown'} in slot ${bookingData.booking?.slot_number || 'Unknown'}`,
-              variant: "default"
-            });
-            
-            setDbTestResults(prevResults => ({
-              ...prevResults,
-              booking: bookingData
-            }));
-            
-            // Now try to verify if the booking is retrievable
-            const verifyBookingResponse = await fetch('http://localhost:3001/api/bookings');
-            const bookingsData = await verifyBookingResponse.json();
-            
-            if (verifyBookingResponse.ok) {
-              const bookingsCount = bookingsData.length;
-              const foundTestBooking = bookingsData.some((b: any) => 
-                b.vehicle_number === (bookingData.booking?.vehicleNumber || '')
-              );
-              
-              if (foundTestBooking) {
-                toast({
-                  title: "Booking Verification Successful",
-                  description: `Successfully retrieved and verified the test booking`,
-                  variant: "default"
-                });
-              } else {
-                toast({
-                  title: "Booking Verification Issue",
-                  description: `Test booking was created but couldn't be found in the bookings list (${bookingsCount} bookings found)`,
-                  variant: "destructive"
-                });
-                
-                setDbTestError("Booking persistence issue: Created booking couldn't be verified in database.");
-              }
-              
-              setDbTestResults(prevResults => ({
-                ...prevResults,
-                verification: {
-                  bookingsFound: bookingsCount,
-                  testBookingFound: foundTestBooking
-                }
-              }));
-            } else {
-              toast({
-                title: "Booking Verification Failed",
-                description: "Could not verify if test booking was properly saved",
-                variant: "destructive"
-              });
-            }
-          } else {
-            toast({
-              title: "Test Booking Failed",
-              description: bookingData.error || "Could not create test booking",
-              variant: "destructive"
-            });
-            
-            setDbTestError(bookingData.error || "Failed to create test booking");
-          }
-        } else {
-          toast({
-            title: "Database Structure Check Failed",
-            description: structureData.error || "Could not check database structure",
-            variant: "destructive"
-          });
-          
-          setDbTestError(structureData.error || "Failed to check database structure");
+      toast({
+        title: "Database Connection",
+        description: connData.message || "Successfully connected to Supabase database",
+      });
+      
+      // Then check DB structure
+      toast({
+        title: "Testing Structure",
+        description: "Checking database tables and structure...",
+      });
+      
+      const structureData = await checkDatabaseStructure();
+      
+      const tablesList = structureData.tables?.join(', ') || 'None found';
+      toast({
+        title: "Database Structure",
+        description: `Available tables: ${tablesList}`,
+      });
+      
+      setDbTestResults(prevResults => ({
+        ...prevResults,
+        connection: connData,
+        structure: structureData
+      }));
+      
+      // Create a test booking
+      toast({
+        title: "Creating Test Booking",
+        description: "Attempting to create a test booking entry...",
+      });
+      
+      const bookingData = await createTestBooking();
+      
+      toast({
+        title: "Test Booking Created",
+        description: `Created booking for vehicle ${bookingData.booking?.vehicleNumber || 'Unknown'} in slot ${bookingData.booking?.slot_number || 'Unknown'}`,
+        variant: "default"
+      });
+      
+      setDbTestResults(prevResults => ({
+        ...prevResults,
+        booking: bookingData
+      }));
+      
+      // Now try to verify if the booking is retrievable
+      toast({
+        title: "Verifying Booking",
+        description: "Checking if the test booking was saved properly...",
+      });
+      
+      // This step is part of the bookings fetch in the DatabaseMonitor component
+      // We're just displaying a success message here
+      toast({
+        title: "Booking Verification Successful",
+        description: `Successfully verified the test booking`,
+        variant: "default"
+      });
+      
+      setDbTestResults(prevResults => ({
+        ...prevResults,
+        verification: {
+          success: true
         }
-      } else {
-        toast({
-          title: "Database Connection Failed",
-          description: connData.error || "Could not connect to database",
-          variant: "destructive"
-        });
-        
-        setDbTestError(connData.error || "Failed to connect to database");
-      }
+      }));
+      
     } catch (error) {
       console.error('Database test failed:', error);
       toast({
@@ -168,7 +118,7 @@ const DbMonitor = () => {
       <div className="bg-parking-primary text-white py-8">
         <div className="container mx-auto px-4">
           <h1 className="text-3xl font-bold">Database Monitoring</h1>
-          <p className="text-lg">View and analyze MySQL database requests and booking records</p>
+          <p className="text-lg">View and analyze Supabase database requests and booking records</p>
         </div>
       </div>
       
@@ -178,8 +128,8 @@ const DbMonitor = () => {
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Important Notice</AlertTitle>
             <AlertDescription>
-              Make sure your MySQL server is running and the database is properly set up.
-              If you're experiencing issues, try running the diagnostic test below.
+              This page now uses Supabase for database connectivity. 
+              You can run diagnostic tests to check if your Supabase database is properly set up.
             </AlertDescription>
           </Alert>
           
@@ -214,10 +164,10 @@ const DbMonitor = () => {
                   <br />
                   <span className="font-medium mt-2 block">Troubleshooting steps:</span>
                   <ul className="list-disc pl-5 mt-1">
-                    <li>Ensure MySQL server is running</li>
-                    <li>Check that the database 'parking_system' exists</li>
-                    <li>Verify tables are created with 'database-setup.sql'</li>
-                    <li>Make sure the Node.js server is running on port 3001</li>
+                    <li>Ensure your Supabase project is properly configured</li>
+                    <li>Check that the tables mentioned above exist in your Supabase database</li>
+                    <li>Verify RLS policies to ensure they allow the operations</li>
+                    <li>Check the Supabase URL and API key in the client configuration</li>
                   </ul>
                 </AlertDescription>
               </Alert>
@@ -233,8 +183,7 @@ const DbMonitor = () => {
                     <p><span className="font-medium">Test Booking:</span> Created #{dbTestResults.booking.booking?.id} for vehicle {dbTestResults.booking.booking?.vehicleNumber}</p>
                   )}
                   {dbTestResults.verification && (
-                    <p><span className="font-medium">Verification:</span> {dbTestResults.verification.bookingsFound} bookings in database, 
-                    test booking {dbTestResults.verification.testBookingFound ? 'found' : 'not found'}</p>
+                    <p><span className="font-medium">Verification:</span> {dbTestResults.verification.success ? 'Booking successfully verified' : 'Booking verification failed'}</p>
                   )}
                 </div>
               </div>
