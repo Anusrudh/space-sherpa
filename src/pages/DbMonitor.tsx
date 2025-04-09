@@ -1,3 +1,4 @@
+
 import React from 'react';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
@@ -9,13 +10,38 @@ import { toast } from '@/components/ui/use-toast';
 import { 
   testDatabaseConnection, 
   checkDatabaseStructure, 
-  createTestBooking 
+  createTestBooking,
+  fetchDatabaseMonitoring 
 } from '@/integrations/supabase/utils';
 
 const DbMonitor = () => {
   const [isTestingDb, setIsTestingDb] = React.useState(false);
   const [dbTestResults, setDbTestResults] = React.useState<any>(null);
   const [dbTestError, setDbTestError] = React.useState<string | null>(null);
+  const [monitorData, setMonitorData] = React.useState<any[]>([]);
+  const [isLoadingMonitor, setIsLoadingMonitor] = React.useState(false);
+  
+  // Load monitoring data on mount
+  React.useEffect(() => {
+    const loadMonitoringData = async () => {
+      try {
+        setIsLoadingMonitor(true);
+        const data = await fetchDatabaseMonitoring();
+        setMonitorData(data);
+      } catch (error) {
+        console.error('Error loading monitoring data:', error);
+        toast({
+          title: "Error Loading Data",
+          description: "Could not load database monitoring data. Supabase connection issue.",
+          variant: "destructive"
+        });
+      } finally {
+        setIsLoadingMonitor(false);
+      }
+    };
+    
+    loadMonitoringData();
+  }, []);
   
   const runDatabaseTest = async () => {
     try {
@@ -94,11 +120,15 @@ const DbMonitor = () => {
         }
       }));
       
+      // Reload monitoring data after successful test
+      const updatedMonitorData = await fetchDatabaseMonitoring();
+      setMonitorData(updatedMonitorData);
+      
     } catch (error) {
       console.error('Database test failed:', error);
       toast({
         title: "Database Test Failed",
-        description: "Could not complete database tests. Check console for details.",
+        description: "Could not complete database tests. Supabase connection issue.",
         variant: "destructive"
       });
       
@@ -125,7 +155,7 @@ const DbMonitor = () => {
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Important Notice</AlertTitle>
             <AlertDescription>
-              This page now uses Supabase for database connectivity. 
+              This page uses Supabase for database connectivity. 
               You can run diagnostic tests to check if your Supabase database is properly set up.
             </AlertDescription>
           </Alert>
@@ -187,14 +217,47 @@ const DbMonitor = () => {
             )}
           </div>
           
-          <React.Suspense fallback={
+          {isLoadingMonitor ? (
             <div className="flex items-center justify-center py-20">
               <Loader2 className="h-8 w-8 animate-spin mr-2" />
               <p>Loading database monitor...</p>
             </div>
-          }>
-            <DatabaseMonitor />
-          </React.Suspense>
+          ) : (
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-xl font-semibold mb-4">Database Queries</h2>
+              
+              {monitorData.length === 0 ? (
+                <p className="text-center py-8 text-gray-500">
+                  No query data available. Run a database test to generate monitoring data.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-gray-50 border-b">
+                        <th className="px-4 py-2 text-left">Query Type</th>
+                        <th className="px-4 py-2 text-left">Count</th>
+                        <th className="px-4 py-2 text-left">Average Time</th>
+                        <th className="px-4 py-2 text-left">Max Time</th>
+                        <th className="px-4 py-2 text-left">Last Executed</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {monitorData.map((record, index) => (
+                        <tr key={index} className="border-b hover:bg-gray-50">
+                          <td className="px-4 py-2">{record.query_type}</td>
+                          <td className="px-4 py-2">{record.count}</td>
+                          <td className="px-4 py-2">{record.avg_time}</td>
+                          <td className="px-4 py-2">{record.max_time}</td>
+                          <td className="px-4 py-2">{new Date(record.last_executed).toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
       
