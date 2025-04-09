@@ -29,6 +29,8 @@ import {
 } from '@/components/ui/select';
 import { toast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
+import { useNavigate } from 'react-router-dom';
 
 // Booking form schema
 const formSchema = z.object({
@@ -54,6 +56,7 @@ interface BookingFormProps {
 }
 
 const BookingForm: React.FC<BookingFormProps> = ({ parkingId, parkingName, hourlyRate, selectedSlot }) => {
+  const navigate = useNavigate();
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -107,7 +110,83 @@ const BookingForm: React.FC<BookingFormProps> = ({ parkingId, parkingName, hourl
     return hours * hourlyRate;
   };
 
-  const onSubmit = (data: z.infer<typeof formSchema>) => {
+  const saveBookingToDatabase = async (bookingData: any) => {
+    try {
+      // First get slot ID from the slot number
+      const { data: slotData, error: slotError } = await supabase
+        .from('parking_slots.csv')
+        .select('id')
+        .eq('number', selectedSlot)
+        .limit(1);
+        
+      if (slotError || !slotData || slotData.length === 0) {
+        console.error('Error finding slot:', slotError || 'No slot found');
+        throw new Error('Could not find the parking slot');
+      }
+      
+      const slotId = slotData[0].id;
+      
+      // Next check if the slot is available
+      const { data: slotStatusData, error: statusError } = await supabase
+        .from('parking_slots.csv')
+        .select('status')
+        .eq('id', slotId)
+        .single();
+        
+      if (statusError || (slotStatusData && slotStatusData.status !== 'available')) {
+        throw new Error('This parking slot is no longer available');
+      }
+      
+      // Format date and times
+      const startDate = new Date(bookingData.date);
+      const [startHour, startMinute] = bookingData.startTime.split(':').map(Number);
+      startDate.setHours(startHour, startMinute, 0, 0);
+      
+      const endDate = new Date(bookingData.date);
+      const [endHour, endMinute] = bookingData.endTime.split(':').map(Number);
+      endDate.setHours(endHour, endMinute, 0, 0);
+      
+      // Generate a unique booking ID
+      const randomId = Math.floor(Math.random() * 1000000) + 1;
+      
+      // Insert the booking
+      const { data: bookingResult, error: bookingError } = await supabase
+        .from('bookings')
+        .insert({
+          id: randomId,
+          slot_id: slotId,
+          vehicle_number: bookingData.vehicleNumber,
+          start_time: startDate.toISOString(),
+          end_time: endDate.toISOString(),
+          total_cost: calculateCost(),
+          status: 'upcoming',
+          created_at: new Date().toISOString()
+        });
+        
+      if (bookingError) {
+        console.error('Error creating booking:', bookingError);
+        throw bookingError;
+      }
+      
+      // Update slot status to occupied
+      const { error: updateError } = await supabase
+        .from('parking_slots.csv')
+        .update({ status: 'occupied' })
+        .eq('id', slotId);
+        
+      if (updateError) {
+        console.error('Error updating slot status:', updateError);
+        // We'll still consider the booking successful even if status update fails
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error saving booking:', error);
+      return false;
+    }
+  };
+
+  const onSubmit = async (data: z.infer<typeof formSchema>) => {
     // Validate slot selection
     if (!selectedSlot) {
       toast({
@@ -118,17 +197,42 @@ const BookingForm: React.FC<BookingFormProps> = ({ parkingId, parkingName, hourl
       return;
     }
     
-    // This would be where you'd send data to the backend
+    // Log the booking data (keep existing functionality)
     console.log("Booking submitted:", {
       ...data,
       parkingSlot: selectedSlot
     });
     
-    // Show success message
+    // Show loading toast
     toast({
-      title: "Booking Confirmed!",
-      description: `Your parking slot ${selectedSlot} at ${parkingName} has been booked for ${format(data.date, 'PPP')} from ${data.startTime} to ${data.endTime}.`,
+      title: "Processing Booking",
+      description: "Please wait while we process your booking...",
     });
+    
+    // Save to Supabase
+    const success = await saveBookingToDatabase({
+      ...data,
+      parkingSlot: selectedSlot
+    });
+    
+    if (success) {
+      // Show success message
+      toast({
+        title: "Booking Confirmed!",
+        description: `Your parking slot ${selectedSlot} at ${parkingName} has been booked for ${format(data.date, 'PPP')} from ${data.startTime} to ${data.endTime}.`,
+      });
+      
+      // Navigate to bookings page after short delay
+      setTimeout(() => {
+        navigate('/bookings');
+      }, 2000);
+    } else {
+      toast({
+        title: "Booking Failed",
+        description: "There was an error processing your booking. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
