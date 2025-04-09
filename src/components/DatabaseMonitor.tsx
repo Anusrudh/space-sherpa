@@ -116,10 +116,14 @@ const DatabaseMonitor = () => {
       const structures = {};
       const recordCounts = {};
       
-      for (const table of tables) {
-        const { count, error } = await fetchTableCount(table);
-        recordCounts[table] = count || 0;
-      }
+      const slots = await fetchAllSlots();
+      recordCounts['parking_slots.csv'] = slots ? slots.length : 0;
+      
+      const bookings = await fetchAllBookings();
+      recordCounts['bookings'] = bookings ? bookings.length : 0;
+      
+      const monitoring = await fetchDatabaseMonitoring();
+      recordCounts['db_monitoring'] = monitoring ? monitoring.length : 0;
       
       const data = {
         tables,
@@ -143,23 +147,6 @@ const DatabaseMonitor = () => {
       });
     } finally {
       setLoadingStructure(false);
-    }
-  };
-  
-  const fetchTableCount = async (table: string) => {
-    try {
-      const { count, error } = await fetch(`https://eqcgrqjucmdojzanemwa.supabase.co/rest/v1/${table}?select=count`, {
-        headers: {
-          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVxY2dycWp1Y21kb2p6YW5lbXdhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQxMjc0NjksImV4cCI6MjA1OTcwMzQ2OX0.isjpmrExC4CiaBrF__Y3LBwRJ2dUf012Lt9awq-G9Xs',
-          'Content-Type': 'application/json',
-          'Prefer': 'count=exact'
-        }
-      }).then(res => res.json());
-      
-      return { count: count || 0, error };
-    } catch (error) {
-      console.error(`Error fetching count for ${table}:`, error);
-      return { count: 0, error };
     }
   };
 

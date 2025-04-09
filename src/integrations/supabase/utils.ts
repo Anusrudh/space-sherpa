@@ -1,4 +1,3 @@
-
 import { supabase } from "./client";
 
 // Function to fetch all parking slots
@@ -224,7 +223,7 @@ export const checkDatabaseStructure = async () => {
     // Check each table exists and get record counts
     for (const table of tables) {
       const { count, error } = await supabase
-        .from(table as 'parking_slots.csv' | 'bookings' | 'db_monitoring')
+        .from(table as any)
         .select('*', { count: 'exact', head: true });
       
       if (error) {
@@ -234,10 +233,9 @@ export const checkDatabaseStructure = async () => {
       
       recordCounts[table] = count || 0;
       
-      // Get columns for each table - this is just a simplified representation
-      // as we can't directly query table schema through Supabase JS client
+      // Get columns for each table
       const { data, error: columnsError } = await supabase
-        .from(table as 'parking_slots.csv' | 'bookings' | 'db_monitoring')
+        .from(table as any)
         .select('*')
         .limit(1);
       

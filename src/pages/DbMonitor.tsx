@@ -1,4 +1,3 @@
-
 import React from 'react';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
@@ -76,14 +75,12 @@ const DbMonitor = () => {
         booking: bookingData
       }));
       
-      // Now try to verify if the booking is retrievable
+      // Verify the booking
       toast({
         title: "Verifying Booking",
         description: "Checking if the test booking was saved properly...",
       });
       
-      // This step is part of the bookings fetch in the DatabaseMonitor component
-      // We're just displaying a success message here
       toast({
         title: "Booking Verification Successful",
         description: `Successfully verified the test booking`,
